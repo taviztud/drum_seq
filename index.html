@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>drum_seq v0.1</title>
+    <script src="https://unpkg.com/tone"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400&display=swap');
+
+        /* Estilos generales para el cuerpo del documento */
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #2C2C2C;
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* Estilos para el contenedor principal */
+        .container {
+            background-color: #404040;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.25);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #FFA726;
+            margin-bottom: 20px;
+            font-size: 1em;
+        }
+
+        /* Estilos para los controles */
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .control-group label {
+            margin-bottom: 5px;
+            font-size: 0.8em;
+            color: #BDBDBD;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Estilos para el secuenciador */
+        .sequencer {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+        }
+
+        .row {
+            display: flex;
+            gap: 3px;
+            justify-content: center;
+        }
+
+        .cell {
+            width: 25px;
+            height: 25px;
+            background-color: #BDBDBD;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+
+        .cell.active {
+            background-color: #4CAF50;
+        }
+
+        .cell.current {
+            border: 2px solid #FF7043;
+        }
+
+        /* Estilos para el pie de página */
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #777;
+        }
+
+        .footer a {
+            color: #777;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Estilos para los botones */
+        button {
+            background-color: #FFA726;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.9em;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+            margin-bottom: 20px;
+        }
+
+        button:hover {
+            background-color: #FF8A65;
+        }
+
+        /* Estilos para los selectores y entradas */
+        select, input[type="number"], input[type="range"] {
+            background-color: #616161;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #FFA726;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        input[type="range"]:hover {
+            opacity: 1;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #ffffff;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #ffffff;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>drum_seq v0.1</h1>
+        <button id="playButton">Play</button>
+        <div class="controls">
+            <div class="control-group">
+                <div class="control-item">
+                    <label for="steps">Steps</label>
+                    <input type="number" id="steps" value="8" min="8" max="16">
+                </div>
+            </div>
+            <div class="control-group">
+                <div class="control-item">
+                    <label for="tempo">Tempo</label>
+                    <input type="number" id="tempo" value="120" min="60" max="240">
+                </div>
+            </div>
+        </div>
+        <div id="sequencer" class="sequencer"></div>
+        <div class="controls">
+            <div class="control-group">
+                <div class="control-item">
+                    <label for="volume">Volume</label>
+                    <input type="range" id="volume" class="slider" min="-60" max="0" value="-12">
+                </div>
+            </div>
+        </div>
+        <div class="footer">
+            <p>developed by <a href="mailto:gustavo.astudillo.p@gmail.com">Gustavo Astudillo</a> 2024.</p>
+        </div>
+    </div>
+
+    <script>
+        // Crear instancias de sintetizadores para cada sonido de percusión
+        const kick = new Tone.MembraneSynth().toDestination();
+        const snare = new Tone.NoiseSynth({ 
+            noise: { type: 'white' },
+            envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+        }).toDestination();
+        const hihat = new Tone.MetalSynth({
+            frequency: 200,
+            envelope: { attack: 0.001, decay: 0.1, release: 0.1 },
+            harmonicity: 5.1,
+            modulationIndex: 32,
+            resonance: 4000,
+            octaves: 1.5
+        }).toDestination();
+
+        // Ajustar el volumen inicial de cada sintetizador
+        kick.volume.value = snare.volume.value = hihat.volume.value = -12;
+
+        // Variables para manejar el estado de reproducción y la secuencia de pasos
+        let isPlaying = false;
+        let steps = 8;
+        const notes = ['kick', 'snare', 'hihat'];
+        let sequence = Array(steps).fill().map(() => Array(notes.length).fill(false));
+
+        // Función para crear el secuenciador en el DOM
+        function createSequencer() {
+            const sequencerElement = document.getElementById('sequencer');
+            sequencerElement.innerHTML = '';
+            sequence = Array(steps).fill().map(() => Array(notes.length).fill(false));
+
+            // Crear filas y celdas para cada nota
+            notes.forEach((note, i) => {
+                const row = document.createElement('div');
+                row.classList.add('row');
+                for (let j = 0; j < steps; j++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.addEventListener('click', () => toggleCell(i, j));
+                    row.appendChild(cell);
+                }
+                sequencerElement.appendChild(row);
+            });
+        }
+
+        // Función para alternar el estado de una celda (activo/inactivo)
+        function toggleCell(row, col) {
+            sequence[col][row] = !sequence[col][row];
+            updateSequencerUI();
+        }
+
+        // Función para actualizar la interfaz de usuario del secuenciador
+        function updateSequencerUI() {
+            const rows = document.querySelectorAll('.row');
+            rows.forEach((row, i) => {
+                const cells = row.querySelectorAll('.cell');
+                cells.forEach((cell, j) => {
+                    cell.classList.toggle('active', sequence[j][i]);
+                });
+            });
+        }
+
+        // Función para actualizar el volumen de los sintetizadores
+        function updateVolume() {
+            kick.volume.value = snare.volume.value = hihat.volume.value = parseInt(document.getElementById('volume').value);
+        }
+
+        // Manejar el evento de clic en el botón de reproducción
+        document.getElementById('playButton').addEventListener('click', () => {
+            if (isPlaying) {
+                Tone.Transport.stop();
+                document.getElementById('playButton').textContent = 'Play';
+            } else {
+                Tone.start();
+                Tone.Transport.start();
+                document.getElementById('playButton').textContent = 'Stop';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        // Manejar el cambio de tempo
+        document.getElementById('tempo').addEventListener('change', (e) => {
+            Tone.Transport.bpm.value = e.target.value;
+        });
+
+        // Manejar el cambio en el número de pasos
+        document.getElementById('steps').addEventListener('change', (e) => {
+            steps = parseInt(e.target.value);
+            createSequencer();
+            updateSequencerUI();
+        });
+
+        // Manejar el cambio en el volumen
+        document.getElementById('volume').addEventListener('input', updateVolume);
+
+        // Crear el secuenciador y actualizar el volumen inicial
+        createSequencer();
+        updateVolume();
+
+        // Programar el secuenciador para reproducir cada paso
+        let currentStep = 0;
+        Tone.Transport.scheduleRepeat((time) => {
+            notes.forEach((note, i) => {
+                if (sequence[currentStep][i]) {
+                    if (note === 'kick') kick.triggerAttackRelease('C1', '8n', time);
+                    if (note === 'snare') snare.triggerAttackRelease('8n', time);
+                    if (note === 'hihat') hihat.triggerAttackRelease('16n', time);
+                }
+            });
+
+            // Actualizar la interfaz de usuario para mostrar el paso actual
+            const rows = document.querySelectorAll('.row');
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('.cell');
+                cells.forEach((cell, index) => {
+                    cell.classList.toggle('current', index === currentStep);
+                });
+            });
+
+            currentStep = (currentStep + 1) % steps;
+        }, '16n');
+
+        // Ajustar el tempo inicial
+        Tone.Transport.bpm.value = 120;
+		
+		// developed by Gustavo Astudillo 2024 gustavo.astudillo.p@gmail.com
+		
+    </script>
+</body>
+</html>
