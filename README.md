@@ -1,6 +1,6 @@
-# Drum Sequencer v0.1
+# drum_seq v0.1
 
-Drum Sequencer es un secuenciador de batería basado en web que utiliza Tone.js para generar sonidos de percusión. Este proyecto permite a los usuarios crear patrones de batería personalizables y reproducirlos en su navegador.
+drum_seq es un secuenciador de batería basado en web que utiliza Tone.js para generar sonidos de percusión. Este proyecto permite a los usuarios crear patrones de batería personalizables y reproducirlos en su navegador.
 
 ## Características
 
