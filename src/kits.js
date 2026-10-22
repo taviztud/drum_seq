@@ -78,3 +78,17 @@ export const KITS = [
 ];
 
 export const findKit = (id) => KITS.find((k) => k.id === id) ?? KITS[0];
+
+// Keys: vintage keyboards, sampled. Mellotron tapes (archive.org Mellotron archive; license unclear),
+// Greg Sullivan's electric pianos (CC BY 3.0) and the VCSL TX81Z FM piano (CC0), all via smplr.
+export const KEY_SOUNDS = [
+  { id: 'mk2-violins', name: 'Mellotron Violins', type: 'mellotron', instrument: 'MKII VIOLINS' },
+  { id: 'choir', name: 'Mellotron 8-Voice Choir', type: 'mellotron', instrument: '8VOICE CHOIR' },
+  { id: 'flute', name: 'Mellotron Flute', type: 'mellotron', instrument: 'TRON FLUTE' },
+  { id: 'brass', name: 'Mellotron Brass', type: 'mellotron', instrument: 'MKII BRASS' },
+  { id: 'wurli', name: 'Wurlitzer EP200', type: 'ep', instrument: 'WurlitzerEP200' },
+  { id: 'cp80', name: 'Yamaha CP-80', type: 'ep', instrument: 'CP80' },
+  { id: 'pianet', name: 'Hohner Pianet T', type: 'ep', instrument: 'PianetT' },
+  { id: 'tx81z', name: 'Yamaha TX81Z FM piano', type: 'ep', instrument: 'TX81Z' },
+];
+export const findKeySound = (id) => KEY_SOUNDS.find((k) => k.id === id) ?? KEY_SOUNDS[0];

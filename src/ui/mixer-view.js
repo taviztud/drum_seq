@@ -2,7 +2,7 @@ import { knob } from './knob.js';
 import { CHANNELS, DELAY_DIVISIONS } from '../project.js';
 import { SWING } from '../pattern.js';
 
-const NAMES = { bass1: 'Bass 1', bass2: 'Bass 2', drums: 'Drums' };
+const NAMES = { bass1: 'Bass', synth: 'Synth', keys: 'Keys', drums: 'Drums' };
 // 3/16 and 3/8 are dotted notes: the classic syncopated echo, written the way musicians say it.
 const DELAY_NAMES = {
   '1/16': ['1/16', 'Sixteenth'], '1/8': ['1/8', 'Eighth'], '3/16': ['1/8 D', 'Dotted eighth'],

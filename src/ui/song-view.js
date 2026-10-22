@@ -41,7 +41,10 @@ export function createSongView(root, app) {
     <footer class="credits">
       <p>Bass voices: <a href="https://github.com/RobinSchmidt/Open303">Open303</a> by Robin Schmidt (MIT), ported to Web Audio.
       Drum samples from <a href="https://github.com/smpldsnds">smpldsnds</a> and the <a href="https://www.youtube.com/@synthabuse">Synth Abuse</a> collection,
-      played with <a href="https://github.com/danigb/smplr">smplr</a>. Type: Archivo (OFL).</p>
+      Keys: Mellotron tapes from the <a href="https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z">Mellotron Archive</a>,
+      electric pianos by Greg Sullivan (<a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>) and the TX81Z from
+      <a href="https://github.com/sgossner/VCSL">VCSL</a> (CC0), via smpldsnds.
+      Played with <a href="https://github.com/danigb/smplr">smplr</a>. Type: Archivo (OFL).</p>
       <p>By Gustavo Astudillo. <a href="https://github.com/taviztud/drum_seq">Source code on GitHub</a>.</p>
     </footer>`;
 

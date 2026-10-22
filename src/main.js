@@ -1,8 +1,8 @@
 import { createProject, normalizeProject, migrateV1, SCENES } from './project.js';
 import { BPM, parseInRange } from './pattern.js';
-import { findKit } from './kits.js';
+import { findKit, findKeySound } from './kits.js';
 import { createRack } from './rack.js';
-import { createBassView } from './ui/bass-view.js';
+import { createBassView, createSynthView, createKeysView } from './ui/note-view.js';
 import { createDrumView } from './ui/drum-view.js';
 import { createMixerView } from './ui/mixer-view.js';
 import { createSongView } from './ui/song-view.js';
@@ -48,7 +48,8 @@ const app = {
   changed(kind) {
     save();
     if (kind === 'sound' || kind === 'mix') app.rack?.apply(app.project);
-    if (kind === 'kit') loadKit();
+    if (kind === 'kit') loadSound('kit');
+    if (kind === 'keys') loadSound('keys');
     if (kind === 'song') { renderScenes(); views.song.render(); }
     if (kind === 'structure') rebuildAll();
   },
@@ -63,8 +64,9 @@ const app = {
 };
 
 const views = {
-  bass1: createBassView($('#view-bass1'), app, 0),
-  bass2: createBassView($('#view-bass2'), app, 1),
+  bass1: createBassView($('#view-bass1'), app),
+  synth: createSynthView($('#view-synth'), app),
+  keys: createKeysView($('#view-keys'), app),
   drums: createDrumView($('#view-drums'), app),
   mixer: createMixerView($('#view-mixer'), app),
   song: createSongView($('#view-song'), app),
@@ -222,7 +224,7 @@ function draw() {
     const ev = drawQueue.shift();
     last = ev;
     if (ev.drums.length) { flash(tabLeds.drums); views.drums.hits(ev.drums); }
-    ev.bass.forEach((on, i) => on && flash(tabLeds[`bass${i + 1}`]));
+    for (const [id, on] of Object.entries(ev.notes)) if (on) flash(tabLeds[id]);
   }
   if (last && app.rack?.playing) {
     if (last.scene !== playingScene) {
@@ -232,7 +234,7 @@ function draw() {
       Object.values(views).forEach((v) => (resized ? v.rebuild() : v.render()));
       renderScenes();
     }
-    for (const id of ['bass1', 'bass2', 'drums']) views[id].playhead(last.pos);
+    for (const id of ['bass1', 'synth', 'keys', 'drums']) views[id].playhead(last.pos);
     views.song.position(last.songIndex);
   }
   if (currentTab === 'mixer' && app.rack) views.mixer.meters(app.rack.levels());
@@ -241,18 +243,23 @@ function draw() {
 
 // ---------- Audio ----------
 
-async function loadKit() {
+// Load the drum kit or the keyboard sound the project asks for, showing progress on its machine.
+const SOUND_SLOTS = {
+  kit: { find: () => findKit(app.project.drums.kit), wanted: () => app.project.drums.kit, view: () => views.drums, load: (id, cb) => app.rack.loadKit(id, cb) },
+  keys: { find: () => findKeySound(app.project.keys.sound), wanted: () => app.project.keys.sound, view: () => views.keys, load: (id, cb) => app.rack.loadKeys(id, cb) },
+};
+async function loadSound(slot) {
   if (!app.rack) return;
-  const kit = findKit(app.project.drums.kit);
-  views.drums.setStatus(`Loading ${kit.name}…`, 'loading');
+  const { find, wanted, view, load } = SOUND_SLOTS[slot];
+  const def = find();
+  const show = (text, state) => wanted() === def.id && view().setStatus(text, state);
+  show(`Loading ${def.name}…`, 'loading');
   try {
-    await app.rack.loadKit(kit.id, ({ loaded, total }) => {
-      if (app.project.drums.kit === kit.id) views.drums.setStatus(`Loading ${kit.name}… ${loaded}/${total}`, 'loading');
-    });
-    if (app.project.drums.kit === kit.id) views.drums.setStatus(`${kit.name} ready`, 'ready');
+    await load(def.id, ({ loaded, total }) => show(`Loading ${def.name}… ${loaded}/${total}`, 'loading'));
+    show(`${def.name} ready`, 'ready');
   } catch (error) {
     console.error(error);
-    if (app.project.drums.kit === kit.id) views.drums.setStatus(`Couldn't load the ${kit.name}. Check your connection and pick it again.`, 'error');
+    show(`Couldn't load the ${def.name}. Check your connection and pick it again.`, 'error');
   }
 }
 
@@ -269,7 +276,7 @@ async function startAudio() {
     app.toast('This browser cannot run the audio engine (AudioWorklet is missing).');
     return;
   }
-  await loadKit();
+  await Promise.all([loadSound('kit'), loadSound('keys')]);
 }
 
 // ---------- Start ----------

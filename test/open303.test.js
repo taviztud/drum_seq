@@ -1,44 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
+import { renderWith, pitchOf, rms } from './worklet-harness.js';
 
-// Run the AudioWorklet file in a sandbox that imitates AudioWorkletGlobalScope.
-function loadProcessor(sampleRate = 48000) {
-  const scope = { sampleRate, currentTime: 0, Math, Float64Array, Array, console };
-  scope.AudioWorkletProcessor = class { constructor() { this.port = { onmessage: null }; } };
-  scope.registerProcessor = (name, cls) => { scope.Processor = cls; };
-  vm.runInNewContext(readFileSync(new URL('../src/worklets/open303-processor.js', import.meta.url), 'utf8'), scope);
-  return scope;
-}
-
-// Render `seconds` of audio with the given note events and knob values.
-function render(events, seconds, knobs = {}, sampleRate = 48000) {
-  const scope = loadProcessor(sampleRate);
-  const proc = new scope.Processor({ processorOptions: { events } });
-  const params = Object.fromEntries(scope.Processor.parameterDescriptors.map((d) => [d.name, [knobs[d.name] ?? d.defaultValue]]));
-  const out = new Float32Array(Math.ceil(seconds * sampleRate / 128) * 128);
-  for (let i = 0; i < out.length; i += 128) {
-    scope.currentTime = i / sampleRate;
-    const block = new Float32Array(128);
-    proc.process([], [[block]], params);
-    out.set(block, i);
-  }
-  return out;
-}
-
-// Fundamental by autocorrelation over a window.
-function pitchOf(x, from, to, sampleRate = 48000) {
-  const seg = x.subarray(from * sampleRate, to * sampleRate);
-  let best = 0, bestLag = 0;
-  for (let lag = Math.floor(sampleRate / 1000); lag < sampleRate / 25; lag++) {
-    let s = 0;
-    for (let i = 0; i + lag < seg.length; i++) s += seg[i] * seg[i + lag];
-    if (s > best) { best = s; bestLag = lag; }
-  }
-  return sampleRate / bestLag;
-}
-const rms = (x, from, to, sr = 48000) => Math.sqrt(x.subarray(from * sr, to * sr).reduce((a, v) => a + v * v, 0) / ((to - from) * sr));
+const render = (events, seconds, knobs) => renderWith('open303-processor.js', events, seconds, knobs).out;
 
 test('a note plays at the right pitch and stays finite', () => {
   const out = render([{ time: 0, kind: 'on', key: 45, accent: false }, { time: 0.4, kind: 'off', key: 45 }], 0.6, { resonance: 0.2 });

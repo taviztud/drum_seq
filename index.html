@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#1b1917">
-  <meta name="description" content="A pocket studio of vintage machines: two TB-303 style bass lines and sampled TR-808, TR-909, LinnDrum and more.">
+  <meta name="description" content="A pocket studio of vintage machines: a TB-303 style bass line, a Minimoog and Juno style synth, Mellotron and electric pianos, and sampled TR-808, TR-909, LinnDrum and more.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -35,18 +35,20 @@
     </header>
 
     <main class="stage">
-      <section id="view-bass1" class="view" aria-label="Bass line 1" data-view="bass1"></section>
-      <section id="view-bass2" class="view" aria-label="Bass line 2" data-view="bass2" hidden></section>
+      <section id="view-bass1" class="view" aria-label="Bass line" data-view="bass1"></section>
+      <section id="view-synth" class="view" aria-label="Synth" data-view="synth" hidden></section>
+      <section id="view-keys" class="view" aria-label="Keys" data-view="keys" hidden></section>
       <section id="view-drums" class="view" aria-label="Drum machine" data-view="drums" hidden></section>
       <section id="view-mixer" class="view" aria-label="Mixer" data-view="mixer" hidden></section>
       <section id="view-song" class="view" aria-label="Song" data-view="song" hidden></section>
     </main>
 
     <nav class="tabs" aria-label="Machines">
-      <button type="button" data-tab="bass1" aria-current="page"><span class="tab-led" aria-hidden="true"></span>Bass 1</button>
-      <button type="button" data-tab="bass2"><span class="tab-led" aria-hidden="true"></span>Bass 2</button>
+      <button type="button" data-tab="bass1" aria-current="page"><span class="tab-led" aria-hidden="true"></span>Bass</button>
+      <button type="button" data-tab="synth"><span class="tab-led" aria-hidden="true"></span>Synth</button>
+      <button type="button" data-tab="keys"><span class="tab-led" aria-hidden="true"></span>Keys</button>
       <button type="button" data-tab="drums"><span class="tab-led" aria-hidden="true"></span>Drums</button>
-      <button type="button" data-tab="mixer">Mixer</button>
+      <button type="button" data-tab="mixer">Mix</button>
       <button type="button" data-tab="song">Song</button>
     </nav>
   </div>

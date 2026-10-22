@@ -1,12 +1,20 @@
 // Turns the project into timed events, one 16th step at a time. Pure: used by live playback
 // and by the offline WAV export, so both play exactly the same thing.
 import { VOICES, gateSteps, gateSeconds, swingOffset } from './pattern.js';
-import { bassStep, GATE } from './bass.js';
+import { noteStep } from './bass.js';
 
 export const VELOCITY = { normal: 96, accent: 127 };
 
-// Where playback is: scene, step inside it, place in the song, and 303 notes held by a slide.
-export const startCursor = () => ({ pos: -1, scene: -1, songIndex: -1, held: [null, null] });
+// The note machines: where each reads its line in a scene, its lowest key, and whether it plays chords.
+export const NOTE_TRACKS = {
+  bass1: { line: (scene) => scene.bass[0], base: 36, poly: () => false },
+  synth: { line: (scene) => scene.synth, base: 48, poly: (project) => project.synth.mode === 'poly' },
+  keys: { line: (scene) => scene.keys, base: 48, poly: () => true },
+};
+const noTracks = (value) => Object.fromEntries(Object.keys(NOTE_TRACKS).map((id) => [id, value()]));
+
+// Where playback is: scene, step inside it, place in the song, and notes held by a slide.
+export const startCursor = () => ({ pos: -1, scene: -1, songIndex: -1, held: noTracks(() => null) });
 
 /**
  * Move to the next step. A new bar picks its scene: the next song entry in song mode,
@@ -15,7 +23,7 @@ export const startCursor = () => ({ pos: -1, scene: -1, songIndex: -1, held: [nu
 export function advance(project, cursor, queuedScene = null) {
   const steps = cursor.scene >= 0 ? project.scenes[cursor.scene].steps : 0;
   const barStart = cursor.pos < 0 || cursor.pos + 1 >= steps;
-  const next = { ...cursor, held: [...cursor.held], barStart };
+  const next = { ...cursor, held: { ...cursor.held }, barStart };
   if (!barStart) {
     next.pos = cursor.pos + 1;
     return next;
@@ -32,7 +40,7 @@ export function advance(project, cursor, queuedScene = null) {
 
 /**
  * Events for the step the cursor points at. `time` is when the step starts (before swing).
- * Returns drum hits, note events per 303, and the updated held keys.
+ * Returns drum hits, note events per note machine, and the updated held keys.
  */
 export function stepEvents(project, cursor, time, stepSec) {
   const scene = project.scenes[cursor.scene];
@@ -51,14 +59,14 @@ export function stepEvents(project, cursor, time, stepSec) {
     drums.push({ voice: id, time: at, accent: scene.drums.ac[step], gate });
   }
 
-  const held = [];
-  const bass = scene.bass.map((line, b) => {
-    const result = bassStep(line, step, cursor.held[b]);
-    held.push(result.held);
-    // Gate-off comes half a step after the (swung) note-on.
-    return result.events.map(({ at: atSteps, ...e }) => ({ ...e, time: at + (atSteps === GATE ? GATE * stepSec : 0) }));
-  });
-  return { drums, bass, held };
+  const held = {};
+  const notes = {};
+  for (const [id, track] of Object.entries(NOTE_TRACKS)) {
+    const result = noteStep(track.line(scene), step, cursor.held[id], { base: track.base, poly: track.poly(project) });
+    held[id] = result.held;
+    notes[id] = result.events.map(({ at: steps, ...e }) => ({ ...e, time: at + steps * stepSec }));
+  }
+  return { drums, notes, held };
 }
 
 // Every event of a whole render: `bars` repeats of the current scene, or the song once.
@@ -70,15 +78,15 @@ export function planRender(project, { song = false, bars = 4 } = {}) {
   const forced = song ? null : project.scene;
   let cursor = startCursor();
   const drums = [];
-  const bass = [[], []];
+  const notes = noTracks(() => []);
   for (let i = 0; i < totalSteps; i++) {
     cursor = advance(p, cursor, forced);
     const ev = stepEvents(p, cursor, i * stepSec, stepSec);
     cursor.held = ev.held;
     drums.push(...ev.drums);
-    ev.bass.forEach((list, b) => bass[b].push(...list));
+    for (const id in notes) notes[id].push(...ev.notes[id]);
   }
   // Release anything still held by a slide at the very end.
-  cursor.held.forEach((key, b) => key !== null && bass[b].push({ kind: 'off', key, time: totalSteps * stepSec }));
-  return { drums, bass, duration: totalSteps * stepSec };
+  for (const [id, key] of Object.entries(cursor.held)) if (key !== null) notes[id].push({ kind: 'off', key, time: totalSteps * stepSec });
+  return { drums, notes, duration: totalSteps * stepSec };
 }

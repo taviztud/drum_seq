@@ -1,14 +1,14 @@
-// The whole jam: 4 scenes (A–D), each with a drum pattern and two 303 lines, plus sound settings,
-// mixer, effects and song order. No DOM, no audio: unit-tested.
+// The whole jam: 4 scenes (A–D), each with a drum pattern, a 303 line, a synth line and a keys line,
+// plus sound settings, mixer, effects and song order. No DOM, no audio: unit-tested.
 import {
   VOICES, STEP_OPTIONS, BPM, SWING, createPattern, resize, presetPattern, normalizePattern, parseInRange,
 } from './pattern.js';
 import { createBass, resizeBass, normalizeBass, presetBass } from './bass.js';
-import { findKit } from './kits.js';
+import { findKit, findKeySound } from './kits.js';
 
 export const SCENES = ['A', 'B', 'C', 'D'];
-export const BASSES = ['bass1', 'bass2'];
-export const CHANNELS = ['bass1', 'bass2', 'drums'];
+export const BASSES = ['bass1'];
+export const CHANNELS = ['bass1', 'synth', 'keys', 'drums'];
 export const DELAY_DIVISIONS = { '1/16': 1, '1/8': 2, '3/16': 3, '1/4': 4, '3/8': 6 }; // in 16th notes
 export const MAX_SONG_LENGTH = 64;
 
@@ -21,11 +21,22 @@ export const BASS_KNOBS = {
   accent: { min: 0, max: 1, default: 0.7 },
   waveform: { min: 0, max: 1, default: 0 },
 };
+export const SYNTH_KNOBS = ['wave', 'detune', 'cutoff', 'reso', 'env', 'attack', 'release', 'glide']; // all 0..1
+// Classic voicings: Minimoog-style monos, Juno-106 and Jupiter-8 style polys.
+export const SYNTH_PRESETS = {
+  'Mini lead': { mode: 'mono', chorus: 0, knobs: { wave: 0.15, detune: 0.35, cutoff: 0.45, reso: 0.35, env: 0.45, attack: 0.02, release: 0.25, glide: 0.35 } },
+  'Mini bass': { mode: 'mono', chorus: 0, knobs: { wave: 0.6, detune: 0.2, cutoff: 0.25, reso: 0.25, env: 0.55, attack: 0, release: 0.15, glide: 0.15 } },
+  'Juno pad': { mode: 'poly', chorus: 2, knobs: { wave: 0.2, detune: 0.5, cutoff: 0.5, reso: 0.15, env: 0.2, attack: 0.55, release: 0.6, glide: 0 } },
+  'Juno strings': { mode: 'poly', chorus: 1, knobs: { wave: 0, detune: 0.6, cutoff: 0.6, reso: 0.05, env: 0.15, attack: 0.35, release: 0.45, glide: 0 } },
+  'Jupiter brass': { mode: 'poly', chorus: 0, knobs: { wave: 0, detune: 0.45, cutoff: 0.35, reso: 0.2, env: 0.6, attack: 0.18, release: 0.3, glide: 0 } },
+  'Poly stab': { mode: 'poly', chorus: 1, knobs: { wave: 0.4, detune: 0.4, cutoff: 0.4, reso: 0.35, env: 0.7, attack: 0, release: 0.12, glide: 0 } },
+};
+export const KEYS_KNOBS = { tone: 1, release: 0.35 }; // defaults, 0..1
 export const DRUM_VOICE = { level: 80, tune: 0, decay: 100, tone: 100, mute: false, solo: false };
 export const CHANNEL = { level: 0.8, pan: 0, delay: 0, drive: 0, mute: false, solo: false };
 
 export function createScene(steps = 16) {
-  return { steps, drums: createPattern(steps).rows, bass: [createBass(steps), createBass(steps)] };
+  return { steps, drums: createPattern(steps).rows, bass: [createBass(steps)], synth: createBass(steps), keys: createBass(steps) };
 }
 
 export function resizeScene(scene, steps) {
@@ -33,18 +44,20 @@ export function resizeScene(scene, steps) {
     steps,
     drums: resize({ steps: scene.steps, rows: scene.drums }, steps).rows,
     bass: scene.bass.map((b) => resizeBass(b, steps)),
+    synth: resizeBass(scene.synth, steps),
+    keys: resizeBass(scene.keys, steps),
   };
 }
 
 export const copyScene = (scene) => structuredClone(scene);
 
-function demoScene(drums, bass1, bass2) {
-  return { steps: 16, drums: presetPattern(drums).rows, bass: [presetBass(bass1), presetBass(bass2)] };
+function demoScene(drums, bass, synth, keys) {
+  return { steps: 16, drums: presetPattern(drums).rows, bass: [presetBass(bass)], synth: presetBass(synth), keys: presetBass(keys) };
 }
 
 export function createProject() {
   return {
-    version: 2,
+    version: 3,
     bpm: 126,
     swing: 54,
     volume: 88,
@@ -52,19 +65,19 @@ export function createProject() {
     songMode: false,
     song: [0, 0, 1, 1, 2, 3],
     scenes: [
-      demoScene('House (909)', 'Acid 1', ''),
-      demoScene('House (909)', 'Acid 2', 'Sub pulse'),
-      demoScene('Breakbeat', 'Squelch', 'Sub pulse'),
-      demoScene('Electro (808)', 'Acid 1', 'Acid 2'),
+      demoScene('House (909)', 'Acid 1', '', 'Chords: long pad'),
+      demoScene('House (909)', 'Acid 2', 'Lead: minor run', 'Chords: Cm Ab Eb Bb'),
+      demoScene('Breakbeat', 'Squelch', 'Lead: arpeggio', 'Chords: house stabs'),
+      demoScene('Electro (808)', 'Acid 1', 'Lead: minor run', 'Chords: Cm Ab Eb Bb'),
     ],
     drums: { kit: 'tr909', selected: 'bd', voices: Object.fromEntries(VOICES.map((v) => [v.id, { ...DRUM_VOICE }])) },
-    bass: [
-      { knobs: knobDefaults() },
-      { knobs: { ...knobDefaults(), waveform: 1, cutoff: 0.25, resonance: 0.45, envMod: 0.35 } },
-    ],
+    bass: [{ knobs: knobDefaults() }],
+    synth: structuredClone(SYNTH_PRESETS['Mini lead']),
+    keys: { sound: 'mk2-violins', knobs: { ...KEYS_KNOBS } },
     mixer: {
       bass1: { ...CHANNEL, level: 0.75, delay: 0.25, drive: 0.35 },
-      bass2: { ...CHANNEL, level: 0.6, delay: 0.1, pan: -0.15 },
+      synth: { ...CHANNEL, level: 0.8, delay: 0.3, pan: 0.15 },
+      keys: { ...CHANNEL, level: 0.55, delay: 0.15, pan: -0.1 },
       drums: { ...CHANNEL, level: 0.85 },
     },
     fx: { delayDivision: '3/16', feedback: 0.4, comp: 0.4 },
@@ -97,7 +110,10 @@ export function normalizeProject(raw) {
       return {
         steps,
         drums: normalizePattern({ steps, rows: s.drums }).rows,
-        bass: [0, 1].map((b) => normalizeBass(s.bass?.[b], steps)),
+        bass: [normalizeBass(s.bass?.[0], steps)], // older saves had a second 303: dropped
+        // Saves from before the synth and keys existed keep the demo lines.
+        synth: s.synth ? normalizeBass(s.synth, steps) : resizeBass(fallback.synth, steps),
+        keys: s.keys ? normalizeBass(s.keys, steps) : resizeBass(fallback.keys, steps),
       };
     });
   }
@@ -117,6 +133,13 @@ export function normalizeProject(raw) {
   p.bass = p.bass.map((fallback, i) => ({
     knobs: Object.fromEntries(Object.entries(BASS_KNOBS).map(([k, r]) => [k, num(raw.bass?.[i]?.knobs?.[k], r.min, r.max, fallback.knobs[k])])),
   }));
+  if (raw.synth) {
+    p.synth.mode = raw.synth.mode === 'poly' ? 'poly' : 'mono';
+    p.synth.chorus = [0, 1, 2].includes(raw.synth.chorus) ? raw.synth.chorus : 0;
+    for (const k of SYNTH_KNOBS) p.synth.knobs[k] = num(raw.synth.knobs?.[k], 0, 1, p.synth.knobs[k]);
+  }
+  p.keys.sound = findKeySound(raw.keys?.sound).id;
+  for (const k of Object.keys(KEYS_KNOBS)) p.keys.knobs[k] = num(raw.keys?.knobs?.[k], 0, 1, p.keys.knobs[k]);
   for (const ch of CHANNELS) {
     const c = raw.mixer?.[ch] ?? {};
     const d = p.mixer[ch];

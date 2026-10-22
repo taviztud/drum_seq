@@ -7,7 +7,6 @@
   --alu-hi: #e3e4df;
   --ink: #1f2125;       /* screen-print ink on aluminium */
   --rubber: #2c2c2f;    /* knobs, keys, pads */
-  --anodized: #19191b;  /* black 303 */
   --console: #24221f;   /* mixer and song panels */
   --paper: #efe7d6;     /* ivory print on dark panels */
   --muted: #a9a294;
@@ -165,7 +164,7 @@ a { color: inherit; }
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
   background: #141210;
   border-top: 1px solid rgb(255 255 255 / 0.07);
@@ -261,12 +260,46 @@ a { color: inherit; }
     linear-gradient(180deg, var(--alu-hi), var(--alu) 60%, #bfc0bb);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 18px rgb(0 0 0 / 0.45);
 }
-.bassline.black {
-  background:
-    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #232326, var(--anodized));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 6px 18px rgb(0 0 0 / 0.5);
+.synth {
+  /* Minimoog: black panel between walnut end cheeks */
+  border-inline: 10px solid #5a3a22;
+  border-image: linear-gradient(90deg, #4a2f1b, #7a5032 45%, #5a3a22) 1;
+  background: linear-gradient(180deg, #2a2a2c, #1a1a1c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.5);
 }
+.synth .logo-num, .synth .logo { color: #f4efe2; }
+.keys-plate {
+  /* Wurlitzer and Mellotron cream */
+  --focus: var(--ink);
+  --select: var(--ink);
+  color: var(--ink);
+  background: linear-gradient(180deg, #efe6d2, #ddd2b8);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 6px 18px rgb(0 0 0 / 0.45);
+}
+.keys-plate .kit-status { color: #5c5547; }
+.keys-plate .note-pads .pad:not(.on) { background: #c4bba6; color: #4e4a40; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.22); border-color: rgb(0 0 0 / 0.15); }
+.keys-plate .note-pads .pad.on { background: #3b2f25; }
+.keys-plate button:not(.key):not(.pad), .keys-plate select { border-color: rgb(0 0 0 / 0.3); }
+.synth .note-pads .pad:not(.on) { background: #101012; color: #8a857b; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.6); }
+/* A rest step under a long note: the note's bar carries on through it */
+.note-pads .pad.tied::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  right: 6px;
+  top: calc(50% - 3px);
+  height: 6px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.55;
+}
+.note-pads .pad-note { white-space: nowrap; font-size: 0.95rem; }
+.switches { gap: 8px; }
+.chord-row { display: flex; }
+.chord-row > button { flex: 1; padding-inline: 2px; }
+.length-row { display: flex; align-items: center; gap: 8px; }
+.length-row output { min-width: 5.5em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.length-row button { width: 48px; padding: 0; font-size: 1.2rem; }
 .rhythm {
   background: linear-gradient(180deg, #34312d, #2a2724);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 6px 18px rgb(0 0 0 / 0.5);
@@ -345,16 +378,14 @@ a { color: inherit; }
 }
 .pad-led { position: absolute; top: 5px; left: 5px; width: 6px; height: 6px; }
 .pad.now .pad-led { opacity: 1; }
-.bass-pads .pad { aspect-ratio: 1 / 1.15; min-height: 0; font-weight: 750; font-stretch: 90%; }
-.bass-pads .pad-note { font-size: 1rem; line-height: 1; }
-.bass-pads .pad-oct { font-size: 0.6rem; line-height: 1; min-height: 0.6rem; }
-.silver .bass-pads .pad:not(.on) { background: #b9bab5; color: #4e5053; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.25); border-color: rgb(0 0 0 / 0.15); }
-.black .bass-pads .pad:not(.on) { background: #111113; color: #8a857b; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.6); }
-.bass-pads .pad.on { background: var(--rubber); color: var(--paper); }
-.black .bass-pads .pad.on { background: #3a3a3e; }
-.bass-pads .pad.accent { box-shadow: inset 0 4px 0 var(--signal), 0 1px 2px rgb(0 0 0 / 0.4); }
-.bass-pads .pad.accent .pad-note { color: #ffb38f; }
-.bass-pads .pad.slide::after {
+.note-pads .pad { aspect-ratio: 1 / 1.15; min-height: 0; font-weight: 750; font-stretch: 90%; }
+.note-pads .pad-note { font-size: 1rem; line-height: 1; }
+.note-pads .pad-oct { font-size: 0.6rem; line-height: 1; min-height: 0.6rem; }
+.silver .note-pads .pad:not(.on) { background: #b9bab5; color: #4e5053; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.25); border-color: rgb(0 0 0 / 0.15); }
+.note-pads .pad.on { background: var(--rubber); color: var(--paper); }
+.note-pads .pad.accent { box-shadow: inset 0 4px 0 var(--signal), 0 1px 2px rgb(0 0 0 / 0.4); }
+.note-pads .pad.accent .pad-note { color: #ffb38f; }
+.note-pads .pad.slide::after {
   content: "";
   position: absolute;
   right: -8px;
@@ -403,6 +434,7 @@ a { color: inherit; }
 .tools [data-tool="left"], .tools [data-tool="right"] { width: 52px; padding: 0; }
 .tools select { grid-column: 1 / -1; }
 .rhythm .tools { grid-template-columns: 1fr 1fr; }
+.tools:has([data-tool="random"][hidden]) { grid-template-columns: auto auto 1fr; }
 .silver button:not(.key):not(.pad), .silver select { border-color: rgb(0 0 0 / 0.3); }
 
 /* ---------- Drum machine ---------- */
@@ -460,7 +492,16 @@ a { color: inherit; }
 
 /* ---------- Mixer ---------- */
 
-.strips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.strips {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(96px, 1fr);
+  gap: 8px;
+  overflow-x: auto; /* five strips: swipe sideways on phones, like a real console */
+  scroll-snap-type: x proximity;
+  padding-bottom: 4px;
+}
+.strip { scroll-snap-align: start; }
 .strip { display: grid; justify-items: center; align-content: start; gap: 8px; padding: 10px 4px 12px; border-radius: 12px; background: rgb(0 0 0 / 0.25); }
 .strip h3, .master h3, .panel h3 { margin: 0; font-size: 0.95rem; }
 .fader-wrap { display: grid; grid-template-columns: auto auto; column-gap: 8px; justify-items: center; }
@@ -599,6 +640,7 @@ button.primary { background: var(--signal); color: var(--ink); border-color: #b2
 }
 
 @media (max-width: 400px) {
+  .tabs button { font-size: 0.72rem; font-stretch: 75%; white-space: nowrap; }
   .stage { padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
   .view { padding-inline: 12px; }
   .pads { gap: 6px 5px; }

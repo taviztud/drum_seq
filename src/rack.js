@@ -1,15 +1,18 @@
-// Audio for the whole rack: two Open303 voices, the sampled drum machine, mixer, delay and master bus.
-// Live playback and the offline WAV export build the same graph and play the same plan.
+// Audio for the whole rack: two Open303 bass lines, the analog synth, the sampled keys and drum machine,
+// mixer, delay and master bus. Live playback and the offline WAV export build the same graph and play the same plan.
 import {
-  DrumMachine, DrumAbuse, Sequencer, Scheduler, CacheStorage as SampleCache, audioBufferToWav16,
+  DrumMachine, DrumAbuse, Mellotron, ElectricPiano, Sequencer, Scheduler, CacheStorage as SampleCache, audioBufferToWav16,
 } from '../vendor/smplr-1.1.0.mjs';
 import { advance, startCursor, stepEvents, planRender, VELOCITY } from './plan.js';
-import { CHANNELS, BASSES, DELAY_DIVISIONS } from './project.js';
-import { findKit } from './kits.js';
+import { CHANNELS, BASSES, DELAY_DIVISIONS, SYNTH_KNOBS } from './project.js';
+import { findKit, findKeySound } from './kits.js';
 
-const WORKLET_URL = new URL('./worklets/open303-processor.js', import.meta.url);
+const WORKLETS = ['open303-processor.js', 'va-processor.js'].map((f) => new URL(`./worklets/${f}`, import.meta.url));
+const NODE_TRACKS = ['bass1', 'synth']; // machines played by an AudioWorklet voice
 const RELEASE = 0.015; // drum choke/retrigger release in seconds, near-instant like the hardware
 const TAIL = 2; // seconds of delay tail kept at the end of an export
+// Juno-60/106 chorus modes: LFO rate (Hz) and delay sweep (s). Index 0 is off.
+const CHORUS = [null, { rate: 0.5, depth: 0.0018 }, { rate: 0.83, depth: 0.0026 }];
 
 // Drum knobs (0..100, tune in semitones) to smplr note options.
 const decaySeconds = (decay) => (decay >= 100 ? Infinity : 0.03 + (decay / 100) ** 2 * 2);
@@ -25,7 +28,12 @@ function driveCurve(amount) {
   return curve;
 }
 
-function buildGraph(ctx, project, bassEvents = [[], []]) {
+async function addWorklets(ctx) {
+  for (const url of WORKLETS) await ctx.audioWorklet.addModule(url);
+}
+
+// `noteEvents` preloads the worklet voices (offline export); live playback posts events instead.
+function buildGraph(ctx, project, noteEvents = {}) {
   const comp = new DynamicsCompressorNode(ctx, { knee: 6, attack: 0.005, release: 0.15 });
   const makeup = new GainNode(ctx);
   const master = new GainNode(ctx);
@@ -59,16 +67,31 @@ function buildGraph(ctx, project, bassEvents = [[], []]) {
     pan.connect(meter);
     channels[id] = { input, drive, fader, pan, send, meter };
   }
+  channels.keys.input.gain.value = 2; // the tape and piano samples are recorded quiet
 
-  const basses = BASSES.map((id, i) => {
-    const node = new AudioWorkletNode(ctx, 'open303', {
-      numberOfInputs: 0, outputChannelCount: [1], processorOptions: { events: bassEvents[i] },
+  const voice = (processor, id) => {
+    const node = new AudioWorkletNode(ctx, processor, {
+      numberOfInputs: 0, outputChannelCount: [1], processorOptions: { events: noteEvents[id] ?? [] },
     });
     node.connect(channels[id].input);
     return node;
-  });
+  };
+  const nodes = { bass1: voice('open303', 'bass1'), synth: voice('va-synth', 'synth') };
 
-  let lastDrive = {};
+  // Juno-style stereo chorus on the synth: two delay lines swept in opposite directions by one LFO.
+  const lfo = new OscillatorNode(ctx, { type: 'triangle' });
+  const chorusWet = new GainNode(ctx, { gain: 0 });
+  const sweeps = [-1, 1].map((side) => {
+    const line = new DelayNode(ctx, { maxDelayTime: 0.02, delayTime: 0.0045 });
+    const sweep = new GainNode(ctx);
+    lfo.connect(sweep).connect(line.delayTime);
+    nodes.synth.connect(line).connect(new StereoPannerNode(ctx, { pan: side })).connect(chorusWet);
+    return { sweep, side };
+  });
+  chorusWet.connect(channels.synth.input);
+  lfo.start();
+
+  const lastDrive = {};
   function apply(p) {
     const now = ctx.currentTime;
     const smooth = (param, value) => param.setTargetAtTime(value, now, 0.015);
@@ -85,9 +108,17 @@ function buildGraph(ctx, project, bassEvents = [[], []]) {
         lastDrive[id] = m.drive;
       }
     }
-    basses.forEach((node, i) => {
-      for (const [name, value] of Object.entries(p.bass[i].knobs)) node.parameters.get(name).setValueAtTime(value, now);
+    BASSES.forEach((id, i) => {
+      for (const [name, value] of Object.entries(p.bass[i].knobs)) nodes[id].parameters.get(name).setValueAtTime(value, now);
     });
+    for (const name of SYNTH_KNOBS) nodes.synth.parameters.get(name).setValueAtTime(p.synth.knobs[name], now);
+    nodes.synth.parameters.get('mono').setValueAtTime(p.synth.mode === 'mono' ? 1 : 0, now);
+    const chorus = CHORUS[p.synth.chorus];
+    smooth(chorusWet.gain, chorus ? 0.8 : 0);
+    if (chorus) {
+      lfo.frequency.setValueAtTime(chorus.rate, now);
+      for (const s of sweeps) s.sweep.gain.setValueAtTime(s.side * chorus.depth, now);
+    }
     const stepSec = 60 / p.bpm / 4;
     smooth(delay.delayTime, Math.min(3, DELAY_DIVISIONS[p.fx.delayDivision] * stepSec));
     smooth(feedback.gain, p.fx.feedback);
@@ -97,15 +128,16 @@ function buildGraph(ctx, project, bassEvents = [[], []]) {
     smooth(master.gain, p.volume === 0 ? 0 : 10 ** (((p.volume / 100 - 1) * 48) / 20));
   }
   apply(project);
-  return { channels, basses, masterMeter, apply };
+  return { channels, nodes, masterMeter, apply };
 }
 
+// Hand every note to Web Audio the moment it is planned, like the worklet events. smplr's default
+// scheduler would hold notes more than 200 ms ahead for a main-thread timer, which a busy phone delays.
+const immediate = (ctx) => Scheduler(ctx, { lookaheadMs: 1e12 });
+
 function loadKit(ctx, def, { destination, storage, onProgress }) {
-  // Hand every note to Web Audio the moment it is planned, like the 303 events. smplr's default
-  // scheduler would hold notes more than 200 ms ahead for a main-thread timer, which a busy phone delays.
-  const scheduler = Scheduler(ctx, { lookaheadMs: 1e12 });
   const samples = Object.values(def.map).filter(Boolean);
-  const options = { destination, storage, scheduler, onLoadProgress: onProgress };
+  const options = { destination, storage, scheduler: immediate(ctx), onLoadProgress: onProgress };
   // Load only the samples this kit uses. DrumMachine kits get their sample list directly
   // (smplr 1.1.0 can't address samples past MIDI 127 in its full 808 list).
   const inst = def.source.type === 'dm'
@@ -114,6 +146,20 @@ function loadKit(ctx, def, { destination, storage, onProgress }) {
       nameToSampleName: Object.fromEntries(samples.map((n) => [n, n])), sampleGroupVariations: {},
     } })
     : DrumAbuse(ctx, { ...options, notesToLoad: { notes: samples }, source: { kind: 'machine', machine: def.source.machine, set: def.source.set } });
+  return inst.ready.then(() => inst);
+}
+
+const KEY_VELOCITY = { normal: 82, accent: 100 };
+
+function loadKeys(ctx, def, { destination, storage, onProgress }) {
+  // Electric pianos have several velocity layers; one range is enough and halves the download.
+  // 'nearest' plays notes past a keyboard's range (a Mellotron has 35 tapes) from the closest sample.
+  const velocityRange = def.type === 'ep' ? [KEY_VELOCITY.normal, KEY_VELOCITY.accent] : [0, 127];
+  const options = {
+    destination, storage, scheduler: immediate(ctx), onLoadProgress: onProgress, instrument: def.instrument, volume: 127,
+    notesToLoad: { velocityRange, fallback: 'nearest' },
+  };
+  const inst = def.type === 'mellotron' ? Mellotron(ctx, options) : ElectricPiano(ctx, options);
   return inst.ready.then(() => inst);
 }
 
@@ -129,40 +175,68 @@ function triggerDrum(kit, hit, params) {
   });
 }
 
+// Keys get one start per note with its length; the plan's note-offs give that length.
+function triggerKeys(inst, events, knobs) {
+  if (!inst) return [];
+  const offs = events.filter((e) => e.kind === 'off');
+  return events.filter((e) => e.kind === 'on').map((e) => ({
+    time: e.time,
+    stop: inst.start({
+      note: e.key, time: e.time, velocity: e.accent ? KEY_VELOCITY.accent : KEY_VELOCITY.normal,
+      duration: (offs.find((o) => o.key === e.key && o.time > e.time)?.time ?? e.time + 0.25) - e.time,
+      lpfCutoffHz: 300 * 66 ** knobs.tone, ampRelease: 0.05 + knobs.release ** 2 * 3,
+    }),
+  }));
+}
+
 /**
  * The live rack. `project()` returns the current project; `queued()` the scene waiting for the
  * next bar (null if none). `onStep` gets what played, at its audio time, for the display.
  */
-export async function createRack({ project, queued, onSceneChange, onStep }) {
+export async function createRack({ project, queued, onStep }) {
   const ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(WORKLET_URL);
+  await addWorklets(ctx);
   const graph = buildGraph(ctx, project());
-  // Cache samples in the browser (https only): kits load instantly and work offline after the first visit.
+  // Cache samples in the browser (https only): sounds load instantly and work offline after the first visit.
   const storage = window.isSecureContext && 'caches' in window ? SampleCache('drum_seq') : undefined;
 
-  const kits = new Map(); // kit id -> Promise<instrument>
-  let kit = null;
-  let loadToken = 0;
-  let pending = []; // drum notes scheduled but maybe not heard yet, so Stop can cancel them
+  const loaded = new Map(); // 'kit:id' or 'keys:id' -> Promise<instrument>
+  const current = { kit: null, keys: null }; // { def, inst } in use
+  const tokens = { kit: 0, keys: 0 };
+  let pending = []; // sampled notes scheduled but maybe not heard yet, so Stop can cancel them
   let cursor = startCursor();
+
+  // Resolves when the sound is playable. A newer call for the same slot wins over an older one.
+  async function use(slot, def, load, destination, onProgress) {
+    const token = ++tokens[slot];
+    const key = `${slot}:${def.id}`;
+    if (!loaded.has(key)) {
+      const ready = load(ctx, def, { destination, storage, onProgress });
+      ready.catch(() => loaded.delete(key)); // let a later attempt retry
+      loaded.set(key, ready);
+    }
+    const inst = await loaded.get(key);
+    if (token === tokens[slot]) current[slot] = { def, inst };
+    return def;
+  }
 
   // Plan 400 ms ahead: a busy phone can stall the main thread past smplr's 200 ms default,
   // and then every machine plays late. Edits still reach the sound within half a second.
   const seq = Sequencer(ctx, { stepSize: '16n', lookaheadMs: 400, intervalMs: 25 });
   seq.on('step', (_, time) => {
     const p = project();
-    const wanted = queued();
-    cursor = advance(p, cursor, wanted);
-    if (cursor.barStart) onSceneChange?.(cursor.scene, cursor.songIndex, time);
+    cursor = advance(p, cursor, queued());
     const ev = stepEvents(p, cursor, time, 60 / p.bpm / 4);
     cursor.held = ev.held;
     pending = pending.filter((n) => n.time > ctx.currentTime);
     for (const hit of ev.drums) {
-      const stop = triggerDrum(kit, hit, p.drums.voices[hit.voice]);
+      const stop = triggerDrum(current.kit, hit, p.drums.voices[hit.voice]);
       if (stop) pending.push({ time: hit.time, stop });
     }
-    ev.bass.forEach((events, i) => events.length && graph.basses[i].port.postMessage({ type: 'events', events }));
-    onStep({ scene: cursor.scene, pos: cursor.pos, songIndex: cursor.songIndex, time, drums: ev.drums.map((d) => d.voice), bass: ev.bass.map((e) => e.some((x) => x.kind === 'on')) });
+    pending.push(...triggerKeys(current.keys?.inst, ev.notes.keys, p.keys.knobs));
+    for (const id of NODE_TRACKS) if (ev.notes[id].length) graph.nodes[id].port.postMessage({ type: 'events', events: ev.notes[id] });
+    const sounding = Object.fromEntries(Object.entries(ev.notes).map(([id, list]) => [id, list.some((e) => e.kind === 'on')]));
+    onStep({ scene: cursor.scene, pos: cursor.pos, songIndex: cursor.songIndex, time, drums: ev.drums.map((d) => d.voice), notes: sounding });
   });
 
   function level(analyser) {
@@ -175,7 +249,6 @@ export async function createRack({ project, queued, onSceneChange, onStep }) {
 
   return {
     get playing() { return seq.state === 'playing'; },
-    get kit() { return kit?.def ?? null; },
     now: () => ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0), // what is heard right now (Bluetooth adds a lot)
     apply(p) { seq.bpm = p.bpm; graph.apply(p); },
 
@@ -190,35 +263,30 @@ export async function createRack({ project, queued, onSceneChange, onStep }) {
       seq.stop();
       for (const p of pending) p.stop();
       pending = [];
-      kit?.inst.stop();
-      for (const node of graph.basses) node.port.postMessage({ type: 'stop' });
+      current.kit?.inst.stop();
+      current.keys?.inst.stop();
+      for (const id of NODE_TRACKS) graph.nodes[id].port.postMessage({ type: 'stop' });
       cursor = startCursor();
     },
 
-    // Resolves when the kit is playable. A newer call wins over an older one.
-    async loadKit(id, onProgress) {
-      const def = findKit(id);
-      const token = ++loadToken;
-      if (!kits.has(def.id)) {
-        const ready = loadKit(ctx, def, { destination: graph.channels.drums.input, storage, onProgress });
-        ready.catch(() => kits.delete(def.id)); // let a later attempt retry
-        kits.set(def.id, ready);
-      }
-      const inst = await kits.get(def.id);
-      if (token === loadToken) kit = { def, inst };
-      return def;
-    },
+    loadKit: (id, onProgress) => use('kit', findKit(id), loadKit, graph.channels.drums.input, onProgress),
+    loadKeys: (id, onProgress) => use('keys', findKeySound(id), loadKeys, graph.channels.keys.input, onProgress),
 
     // Pads and keys play right away, as on the hardware.
     async auditionDrum(voice, params) {
       await ctx.resume();
-      triggerDrum(kit, { voice, time: ctx.currentTime, accent: false }, params);
+      triggerDrum(current.kit, { voice, time: ctx.currentTime, accent: false }, params);
     },
-    async auditionBass(i, key, accent = false) {
+    // Play notes now. A mono machine is skipped while playing: its own line is already sounding.
+    async audition(track, keys, accent = false) {
       await ctx.resume();
-      if (seq.state === 'playing') return; // the line is already playing; don't stack notes on it
+      const p = project();
+      const mono = track !== 'keys' && (track !== 'synth' || p.synth.mode === 'mono');
+      if (mono && seq.state === 'playing') return;
       const t = ctx.currentTime;
-      graph.basses[i].port.postMessage({ type: 'events', events: [{ time: t, kind: 'on', key, accent }, { time: t + 0.18, kind: 'off', key }] });
+      const events = keys.flatMap((key) => [{ time: t, kind: 'on', key, accent }, { time: t + 0.3, kind: 'off', key }]);
+      if (track === 'keys') triggerKeys(current.keys?.inst, events, p.keys.knobs);
+      else graph.nodes[track].port.postMessage({ type: 'events', events });
     },
 
     // Peak level per channel and master, 0..1+, for the meters.
@@ -233,15 +301,18 @@ export async function createRack({ project, queued, onSceneChange, onStep }) {
       if (plan.duration === 0) throw new Error('Nothing to export: the song is empty.');
       const sampleRate = 44100;
       const off = new OfflineAudioContext(2, Math.ceil((plan.duration + TAIL) * sampleRate), sampleRate);
-      await off.audioWorklet.addModule(WORKLET_URL);
-      const offGraph = buildGraph(off, p, plan.bass);
+      await addWorklets(off);
+      const offGraph = buildGraph(off, p, plan.notes);
       onProgress?.('Loading samples…');
-      const def = findKit(p.drums.kit);
-      const inst = await loadKit(off, def, { destination: offGraph.channels.drums.input, storage });
-      for (const hit of plan.drums) triggerDrum({ def, inst }, hit, p.drums.voices[hit.voice]);
+      const kitDef = findKit(p.drums.kit);
+      const [kit, keys] = await Promise.all([
+        loadKit(off, kitDef, { destination: offGraph.channels.drums.input, storage }),
+        loadKeys(off, findKeySound(p.keys.sound), { destination: offGraph.channels.keys.input, storage }),
+      ]);
+      for (const hit of plan.drums) triggerDrum({ def: kitDef, inst: kit }, hit, p.drums.voices[hit.voice]);
+      triggerKeys(keys, plan.notes.keys, p.keys.knobs);
       onProgress?.('Rendering…');
-      const buffer = await off.startRendering();
-      return audioBufferToWav16(buffer);
+      return audioBufferToWav16(await off.startRendering());
     },
   };
 }
