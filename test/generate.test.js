@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHORDS, presetBass, BASS_PRESET_NAMES, MELODY_PRESET_NAMES } from '../src/bass.js';
 import {
-  SCALES, euclid, diatonicChord, chordAt, generateLine, generateChords, mutateLine, transposeLine, inKey,
+  SCALES, euclid, diatonicChord, chordAt, generateLine, generateChords, generateDrums, mutateLine, transposeLine, inKey,
 } from '../src/generate.js';
+import { ROWS } from '../src/pattern.js';
 
 const seeded = (seed) => { let x = seed; return () => ((x = (x * 16807) % 2147483647) / 2147483647); };
 const abs = (s) => 12 * s.oct + s.note;
@@ -89,4 +90,21 @@ test('transposing folds every note into the playable range', () => {
   const line = presetBass('Acid 1');
   for (const semis of [-12, -7, 5, 11, 12]) for (const s of transposeLine(line, semis)) assert.ok(inRange(s));
   assert.deepEqual(transposeLine(transposeLine(line, 5), -5).map(abs), line.map(abs));
+});
+
+test('random drums keep the backbeat and get busier with density', () => {
+  const total = { few: 0, some: 0, many: 0 };
+  for (let seed = 1; seed < 40; seed++) {
+    for (const density of Object.keys(total)) {
+      for (const steps of [16, 32, 12]) {
+        const rows = generateDrums({ steps, density, rng: seeded(seed) });
+        assert.deepEqual(Object.keys(rows).sort(), [...ROWS].sort());
+        for (const id of ROWS) assert.equal(rows[id].length, steps);
+        assert.ok(rows.bd[0], 'the kick lands on the one');
+        for (const at of [4, 12].filter((i) => i < steps)) assert.ok(rows.sd[at] || rows.cp[at], `backbeat on step ${at + 1}`);
+        if (steps === 16) total[density] += ROWS.reduce((n, id) => n + rows[id].filter(Boolean).length, 0);
+      }
+    }
+  }
+  assert.ok(total.few < total.some && total.some < total.many, JSON.stringify(total));
 });

@@ -24,8 +24,8 @@
   --select: var(--signal);
   color-scheme: dark;
   /* Material textures, drawn by the browser from tiny SVG noise filters (no image downloads). */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
-  --grime: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.011' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .16 0 0 0 0 .1 0 0 0 0 .05 2.4 0 0 0 -1.3'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23g)' opacity='.4'/%3E%3C/svg%3E");
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23n)' opacity='.3'/%3E%3C/svg%3E");
+  --sheen: radial-gradient(140% 70% at 25% 0%, rgb(255 255 255 / 0.07), transparent 65%); /* soft light from above */
   --brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.002 .85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23b)' opacity='.5'/%3E%3C/svg%3E");
   --wood: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='400' preserveAspectRatio='none'%3E%3Cfilter id='w' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35 .008' numOctaves='3' seed='3'/%3E%3CfeColorMatrix values='.34 0 0 0 .2 .2 0 0 0 .11 .08 0 0 0 .05 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23w)'/%3E%3C/svg%3E");
   /* Four slotted screw heads in the corners of a panel: each is a slot over a domed head. */
@@ -69,7 +69,7 @@
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: var(--grime), radial-gradient(120% 80% at 50% 0%, #2e2620, #15110e 75%);
+  background: var(--sheen), radial-gradient(120% 80% at 50% 0%, #2e2620, #15110e 75%);
   background-color: #15110e;
   color: var(--paper);
   font: 500 15px/1.35 var(--font);
@@ -131,8 +131,8 @@ a { color: inherit; }
   margin: 0 auto;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  /* the instrument's case: aged black steel with rusty, worn edges */
-  background: var(--grime), var(--grain), linear-gradient(#24211e, #1a1816);
+  /* the instrument's case: black steel with dark wood edges */
+  background: var(--sheen), var(--grain), linear-gradient(#24211e, #1a1816);
   background-blend-mode: normal, overlay, normal;
   box-shadow: inset 4px 0 0 #3a2617, inset -4px 0 0 #3a2617, inset 6px 0 0 #120e0b, inset -6px 0 0 #120e0b;
 }
@@ -145,7 +145,7 @@ a { color: inherit; }
   padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
   position: relative;
   padding-inline: max(22px, env(safe-area-inset-left)) max(22px, env(safe-area-inset-right));
-  background: var(--screws), var(--grime), var(--grain), linear-gradient(#2b2825, #1f1d1b);
+  background: var(--screws), var(--sheen), var(--grain), linear-gradient(#2b2825, #1f1d1b);
   background-blend-mode: normal, normal, normal, normal, normal, normal, normal, normal, normal, overlay, normal;
   border-bottom: 1px solid #0c0a09;
   box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.05), 0 2px 6px rgb(0 0 0 / 0.5);
@@ -220,7 +220,7 @@ a { color: inherit; }
   padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
   position: relative;
   padding-inline: max(22px, env(safe-area-inset-left)) max(22px, env(safe-area-inset-right));
-  background: var(--screws), var(--grime), var(--grain), linear-gradient(#1f1d1b, #151312);
+  background: var(--screws), var(--sheen), var(--grain), linear-gradient(#1f1d1b, #151312);
   background-blend-mode: normal, normal, normal, normal, normal, normal, normal, normal, normal, overlay, normal;
   border-top: 1px solid #0c0a09;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
@@ -312,17 +312,17 @@ a { color: inherit; }
   --focus: var(--ink);
   --select: var(--ink);
   color: var(--ink);
-  /* TB-303: brushed aluminium, scuffed and a little grimy after years of use */
-  background: var(--grime), var(--brushed), linear-gradient(180deg, var(--alu-hi), var(--alu) 60%, #b7b8b2);
-  background-blend-mode: multiply, overlay, normal;
+  /* TB-303: brushed aluminium */
+  background: var(--sheen), var(--brushed), linear-gradient(180deg, var(--alu-hi), var(--alu) 60%, #b7b8b2);
+  background-blend-mode: normal, overlay, normal;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 0 0 1px rgb(0 0 0 / 0.25), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .synth {
-  /* Minimoog: worn black panel between walnut end cheeks */
+  /* Minimoog: black panel between walnut end cheeks */
   border-inline: 12px solid transparent;
   background:
     var(--wood) left / 12px 100% no-repeat border-box, var(--wood) right / 12px 100% no-repeat border-box,
-    var(--grime), var(--grain), linear-gradient(180deg, #262523, #181715);
+    var(--sheen), var(--grain), linear-gradient(180deg, #262523, #181715);
   background-blend-mode: normal, normal, normal, overlay, normal;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.55);
 }
@@ -332,12 +332,12 @@ a { color: inherit; }
   --focus: var(--ink);
   --select: var(--ink);
   color: var(--ink);
-  /* Mellotron: yellowed ivory panel in a wooden case */
+  /* Mellotron: ivory panel in a wooden case */
   border-inline: 12px solid transparent;
   background:
     var(--wood) left / 12px 100% no-repeat border-box, var(--wood) right / 12px 100% no-repeat border-box,
-    var(--grime), var(--grain), linear-gradient(180deg, #ece2c8, #d6c9a8);
-  background-blend-mode: normal, normal, multiply, overlay, normal;
+    var(--sheen), var(--grain), linear-gradient(180deg, #ece2c8, #d6c9a8);
+  background-blend-mode: normal, normal, normal, overlay, normal;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .keys-plate .kit-status { color: #5c5547; }
@@ -366,13 +366,13 @@ a { color: inherit; }
 .length-row button { width: 48px; padding: 0; font-size: 1.2rem; }
 .rhythm {
   /* TR-808/909: graphite panel */
-  background: var(--grime), var(--grain), linear-gradient(180deg, #353230, #282523);
+  background: var(--sheen), var(--grain), linear-gradient(180deg, #353230, #282523);
   background-blend-mode: normal, overlay, normal;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .console {
   /* mixing desk: dark anodized steel */
-  background: var(--grime), var(--grain), linear-gradient(180deg, #282623, #1f1d1b);
+  background: var(--sheen), var(--grain), linear-gradient(180deg, #282623, #1f1d1b);
   background-blend-mode: normal, overlay, normal;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 6px 18px rgb(0 0 0 / 0.55);
 }
@@ -435,7 +435,7 @@ a { color: inherit; }
 
 /* ---------- 303 step pads and keyboard ---------- */
 
-.pads { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px 6px; }
+.pads { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 7px 6px; }
 .pad {
   position: relative;
   min-height: 48px;
@@ -509,6 +509,7 @@ a { color: inherit; }
 .tools .density button { flex: 1; }
 .tools select { grid-column: 1 / -1; }
 .rhythm .tools { grid-template-columns: 1fr 1fr; }
+.rhythm .tools .density { grid-column: auto; }
 .silver button:not(.key):not(.pad), .silver select { border-color: rgb(0 0 0 / 0.3); }
 
 /* ---------- Drum machine ---------- */
@@ -697,7 +698,8 @@ button.primary { background: var(--signal); color: var(--ink); border-color: #b2
 /* ---------- Larger screens ---------- */
 
 @media (min-width: 700px) {
-  .pads { grid-template-columns: repeat(16, 1fr); }
+  .pads { grid-template-columns: repeat(16, minmax(0, 1fr)); }
+  .note-pads .pad-note { font-size: 0.8rem; }
   .knob-cap { width: 62px; height: 62px; }
   .keys { height: 150px; }
   .view { padding: 20px; }
@@ -714,7 +716,8 @@ button.primary { background: var(--signal); color: var(--ink); border-color: #b2
   .voice-panel .knobs, .master .knobs { grid-template-columns: repeat(4, 1fr); }
   .knob-cap, .knob.small .knob-cap { width: 40px; height: 40px; margin: 6px; }
   .knob-pointer::after { top: 4px; height: 12px; }
-  .pads { grid-template-columns: repeat(16, 1fr); }
+  .pads { grid-template-columns: repeat(16, minmax(0, 1fr)); }
+  .note-pads .pad-note { font-size: 0.8rem; }
   .keys { height: 96px; }
   .tabs button { min-height: 44px; flex-direction: row; }
 }

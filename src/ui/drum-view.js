@@ -1,5 +1,6 @@
 import { knob } from './knob.js';
 import { VOICES, ROWS, PRESET_NAMES, presetPattern } from '../pattern.js';
+import { DENSITIES, generateDrums } from '../generate.js';
 import { KITS, findKit } from '../kits.js';
 import { DRUM_VOICE } from '../project.js';
 
@@ -13,6 +14,7 @@ const VOICE_KNOBS = [
 
 // TR-style editing: pick a sound, then its 16 step keys show and toggle that sound only.
 export function createDrumView(root, app) {
+  let density = 'some'; // how busy Random makes the groove; not saved
   root.classList.add('machine', 'rhythm');
   root.innerHTML = `
     <header class="plate-head">
@@ -35,6 +37,8 @@ export function createDrumView(root, app) {
     </div>
     <div class="row tools">
       <select data-tool="preset" aria-label="Load a drum pattern"><option value="">Load a pattern…</option></select>
+      <button type="button" data-tool="random">Random</button>
+      <div class="seg density" role="group" aria-label="Random density">${DENSITIES.map(([id, text]) => `<button type="button" data-density="${id}">${text}</button>`).join('')}</div>
       <button type="button" data-tool="clear-voice">Clear sound</button>
       <button type="button" data-tool="clear-all">Clear all</button>
     </div>`;
@@ -101,6 +105,7 @@ export function createDrumView(root, app) {
   function render() {
     const scene = app.scene();
     if (pads.length !== scene.steps) build();
+    for (const b of root.querySelectorAll('[data-density]')) b.ariaPressed = String(b.dataset.density === density);
     const sel = app.project.drums.selected;
     const kit = findKit(app.project.drums.kit);
     kitSelect.value = kit.id;
@@ -165,9 +170,12 @@ export function createDrumView(root, app) {
     render();
   });
   root.querySelector('.tools').addEventListener('click', (e) => {
-    const tool = e.target.closest('button')?.dataset.tool;
+    const b = e.target.closest('button');
+    if (b?.dataset.density) { density = b.dataset.density; render(); return; }
+    const tool = b?.dataset.tool;
     const scene = app.scene();
-    if (tool === 'clear-voice') scene.drums[app.project.drums.selected].fill(false);
+    if (tool === 'random') scene.drums = generateDrums({ steps: scene.steps, density });
+    else if (tool === 'clear-voice') scene.drums[app.project.drums.selected].fill(false);
     else if (tool === 'clear-all') for (const id of ROWS) scene.drums[id].fill(false);
     else return;
     app.changed('pattern');
