@@ -3,6 +3,7 @@ import { VOICES, ROWS, PRESET_NAMES, presetPattern } from '../pattern.js';
 import { DENSITIES, generateDrums, mutateDrums } from '../generate.js';
 import { KITS, CHARACTERS, findKit, hasCharacters } from '../kits.js';
 import { DRUM_VOICE } from '../project.js';
+import { powerButton, renderPower, chanceRow } from './note-view.js';
 
 const ROW_INFO = [{ id: 'ac', short: 'AC', name: 'Accent' }, ...VOICES];
 const VOICE_KNOBS = [
@@ -15,10 +16,14 @@ const VOICE_KNOBS = [
 // TR-style editing: pick a sound, then its 16 step keys show and toggle that sound only.
 export function createDrumView(root, app) {
   let density = 'some'; // how busy Random makes the groove; not saved
+  let editing = false; // Edit steps: tapping a pad picks a hit, and the knobs and Chance edit that hit only
+  let editStep = 0;
+  let paint = null; // while a finger strokes across pads: the value every pad it crosses gets
   root.classList.add('machine', 'rhythm');
   root.innerHTML = `
     <header class="plate-head">
       <h2 class="logo">Rhythm Composer</h2>
+      ${powerButton('Rhythm Composer')}
       <label class="kit-select"><span class="visually-hidden">Drum machine</span><select data-kit></select></label>
     </header>
     <div class="seg character" role="group" aria-label="Character of the samples">${CHARACTERS.map((c) => `<button type="button" data-character="${c.id}">${c.name}</button>`).join('')}</div>
@@ -35,6 +40,11 @@ export function createDrumView(root, app) {
         </div>
       </div>
       <div class="knobs"></div>
+      <div class="row step-extra">
+        <button type="button" class="toggle" data-edit-steps aria-pressed="false">Edit steps</button>
+        <button type="button" data-clear-hit>Clear locks</button>
+        ${chanceRow()}
+      </div>
     </div>
     <div class="row tools">
       <select data-tool="preset" aria-label="Load a drum pattern"><option value="">Load a pattern…</option></select>
@@ -64,8 +74,11 @@ export function createDrumView(root, app) {
   const knobs = VOICE_KNOBS.map((k) => {
     const el = knob({
       ...k, value: DRUM_VOICE[k.id], defaultValue: DRUM_VOICE[k.id],
-      onInput: (v) => { app.project.drums.voices[app.project.drums.selected][k.id] = v; app.changed('sound'); },
-      onChange: () => app.rack?.auditionDrum(app.project.drums.selected, app.project.drums.voices[app.project.drums.selected]),
+      onInput: (v) => {
+        const hit = editedHit(true);
+        if (hit) { hit[k.id] = v; app.changed('pattern'); renderPads(); } else { app.project.drums.voices[app.project.drums.selected][k.id] = v; app.changed('sound'); }
+      },
+      onChange: () => app.rack?.auditionDrum(app.project.drums.selected, { ...app.project.drums.voices[app.project.drums.selected], ...editedHit() }),
     });
     el.dataset.knob = k.id;
     return el;
@@ -84,7 +97,7 @@ export function createDrumView(root, app) {
       b.type = 'button';
       b.className = `pad step g${Math.floor(i / 4) % 4}`;
       b.dataset.step = i;
-      b.innerHTML = `<span class="pad-led"></span><span class="pad-num">${i + 1}</span>`;
+      b.innerHTML = `<span class="pad-led"></span><span class="pad-mark"></span><span class="pad-num">${i + 1}</span>`;
       return b;
     }));
     pads = [...padsEl.children];
@@ -104,9 +117,35 @@ export function createDrumView(root, app) {
     }));
   }
 
+  // The hit being edited in Edit steps mode (its locks and chance), or null. `create` makes room for new values.
+  function editedHit(create = false) {
+    const scene = app.scene();
+    const sel = app.project.drums.selected;
+    if (!editing || sel === 'ac' || !scene.drums[sel][editStep]) return null;
+    const meta = scene.drumMeta[sel]?.[editStep];
+    if (meta || !create) return meta ?? null;
+    return ((scene.drumMeta[sel] ??= {})[editStep] = {});
+  }
+
+  function renderPads() {
+    const scene = app.scene();
+    const sel = app.project.drums.selected;
+    const row = scene.drums[sel];
+    pads.forEach((p, i) => {
+      const meta = scene.drumMeta[sel]?.[i];
+      p.ariaPressed = String(row[i]);
+      p.classList.toggle('selected', editing && i === editStep);
+      p.classList.toggle('locks', row[i] && !!meta && Object.keys(meta).some((k) => k !== 'prob'));
+      p.classList.toggle('chance', row[i] && meta?.prob < 1);
+    });
+    for (const id of ROWS) cells[id].forEach((c, i) => c.classList.toggle('on', scene.drums[id][i]));
+  }
+
   function render() {
     const scene = app.scene();
     if (pads.length !== scene.steps) build();
+    renderPower(root, app.project.power.drums);
+    editStep = Math.min(editStep, scene.steps - 1);
     for (const b of root.querySelectorAll('[data-density]')) b.ariaPressed = String(b.dataset.density === density);
     const sel = app.project.drums.selected;
     const kit = findKit(app.project.drums.kit);
@@ -120,19 +159,26 @@ export function createDrumView(root, app) {
       chip.classList.toggle('missing', id !== 'ac' && !kit.map[id]);
       chip.classList.toggle('muted', id !== 'ac' && app.project.drums.voices[id].mute);
     }
-    const row = scene.drums[sel];
-    pads.forEach((p, i) => {
-      p.ariaPressed = String(row[i]);
-      p.setAttribute('aria-label', `${info.name}, step ${i + 1}`);
-    });
-    for (const id of ROWS) cells[id].forEach((c, i) => c.classList.toggle('on', scene.drums[id][i]));
+    pads.forEach((p, i) => p.setAttribute('aria-label', `${info.name}, step ${i + 1}`));
+    renderPads();
     for (const r of overview.children) r.classList.toggle('selected', r.dataset.voice === sel);
     const panel = root.querySelector('.voice-panel');
     panel.hidden = sel === 'ac';
     root.querySelector('.voice-name').textContent = kit.map[sel] || sel === 'ac' ? info.name : `${info.name} (not on the ${kit.name})`;
     if (sel !== 'ac') {
       const v = app.project.drums.voices[sel];
-      for (const k of knobs) k.update(v[k.dataset.knob]);
+      const hit = editedHit();
+      for (const k of knobs) {
+        k.update(hit?.[k.dataset.knob] ?? v[k.dataset.knob]);
+        k.classList.toggle('locked', hit?.[k.dataset.knob] !== undefined);
+      }
+      root.querySelector('[data-edit-steps]').ariaPressed = String(editing);
+      root.querySelector('[data-clear-hit]').disabled = !hit;
+      const canEdit = editing && scene.drums[sel][editStep];
+      for (const b of root.querySelectorAll('[data-chance]')) {
+        b.disabled = !canEdit;
+        b.ariaPressed = String(canEdit && Number(b.dataset.chance) === (hit?.prob ?? 1));
+      }
       for (const b of root.querySelectorAll('[data-flag]')) b.ariaPressed = String(v[b.dataset.flag]);
     }
   }
@@ -151,14 +197,52 @@ export function createDrumView(root, app) {
     const row = e.target.closest('.ov-row');
     if (row) chips[row.dataset.voice].click();
   });
-  padsEl.addEventListener('click', (e) => {
-    const pad = e.target.closest('.pad');
-    if (!pad) return;
+  // Steps: a tap toggles, a stroke paints every pad it crosses with the first pad's new value.
+  // Vertical strokes still scroll the page (touch-action: pan-y in style.css).
+  function setPad(i) {
     const row = app.scene().drums[app.project.drums.selected];
-    const i = Number(pad.dataset.step);
-    row[i] = !row[i];
+    if (row[i] === paint) return;
+    row[i] = paint;
     app.haptic();
     app.changed('pattern');
+    renderPads();
+  }
+  padsEl.addEventListener('pointerdown', (e) => {
+    const pad = e.target.closest('.pad');
+    if (!pad) return;
+    const i = Number(pad.dataset.step);
+    if (editing) { editStep = i; render(); return; }
+    paint = !app.scene().drums[app.project.drums.selected][i];
+    setPad(i);
+  });
+  padsEl.addEventListener('pointermove', (e) => {
+    if (paint === null) return;
+    const pad = document.elementFromPoint(e.clientX, e.clientY)?.closest('.drum-pads .pad');
+    if (pad) setPad(Number(pad.dataset.step));
+  });
+  for (const type of ['pointerup', 'pointercancel']) addEventListener(type, () => (paint = null));
+  padsEl.addEventListener('click', (e) => { // keyboard (Enter/Space) only: pointers were handled above
+    const pad = e.target.closest('.pad');
+    if (!pad || e.detail !== 0) return;
+    const i = Number(pad.dataset.step);
+    if (editing) { editStep = i; render(); return; }
+    paint = !app.scene().drums[app.project.drums.selected][i];
+    setPad(i);
+    paint = null;
+  });
+  root.querySelector('.voice-panel .step-extra').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const scene = app.scene();
+    const sel = app.project.drums.selected;
+    if (b.hasAttribute('data-edit-steps')) editing = !editing;
+    else if (b.hasAttribute('data-clear-hit')) { delete scene.drumMeta[sel]?.[editStep]; app.changed('pattern'); }
+    else if (b.dataset.chance) { editedHit(true).prob = Number(b.dataset.chance); app.changed('pattern'); }
+    render();
+  });
+  root.querySelector('.power').addEventListener('click', () => {
+    app.project.power.drums = !app.project.power.drums;
+    app.changed('power');
     render();
   });
   root.querySelector('.voice-head .seg').addEventListener('click', (e) => {
@@ -187,10 +271,10 @@ export function createDrumView(root, app) {
     if (b?.dataset.density) { density = b.dataset.density; render(); return; }
     const tool = b?.dataset.tool;
     const scene = app.scene();
-    if (tool === 'random') scene.drums = generateDrums({ steps: scene.steps, density });
+    if (tool === 'random') Object.assign(scene, { drums: generateDrums({ steps: scene.steps, density }), drumMeta: {} });
     else if (tool === 'mutate') scene.drums = mutateDrums(scene.drums);
-    else if (tool === 'clear-voice') scene.drums[app.project.drums.selected].fill(false);
-    else if (tool === 'clear-all') for (const id of ROWS) scene.drums[id].fill(false);
+    else if (tool === 'clear-voice') { scene.drums[app.project.drums.selected].fill(false); delete scene.drumMeta[app.project.drums.selected]; }
+    else if (tool === 'clear-all') { for (const id of ROWS) scene.drums[id].fill(false); scene.drumMeta = {}; }
     else return;
     app.changed('pattern');
     render();
@@ -200,6 +284,7 @@ export function createDrumView(root, app) {
     const rows = presetPattern(e.target.value).rows;
     const scene = app.scene();
     for (const id of ROWS) scene.drums[id] = Array.from({ length: scene.steps }, (_, i) => rows[id][i % 16]);
+    scene.drumMeta = {};
     e.target.value = '';
     app.changed('pattern');
     render();

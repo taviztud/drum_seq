@@ -35,7 +35,7 @@ Es la idea de ReBirth, en el navegador.
   - Por sonido: Level, Tune, Decay, Tone, Mute y Solo. El hi-hat cerrado corta al abierto.
   - Random arma un groove de house, breakbeat o electro (bombo en el 1, caja o clap en el 2 y el 4), y Mutate lo
     varía sin perder esa base.
-- **Mixer**: por máquina, fader, medidor LED, Pan, envíos a Delay y Reverb, Drive (en el bajo), Mute y Solo.
+- **Mixer**: por máquina, fader, medidor LED, Pan, envíos a Delay y Reverb, Drive (saturación, en bajo, synth y keys), Mute y Solo.
   En el máster: volumen, compresor, reverb, delay sincronizado al tempo (de 1/16 a 1/4 con puntillo) con feedback, swing estilo
   MPC y un limitador de seguridad.
 - **Song**: 4 escenas (A–D), cada una con su batería, su línea de bajo, su línea de synth y la de keys, de 8 a 32 pasos.
@@ -59,13 +59,23 @@ Es la idea de ReBirth, en el navegador.
 
 ## Para componer
 
+- **Encender y apagar máquinas:** cada máquina tiene su botón On/Off. Apagada no suena, no gasta CPU en su
+  secuencia y no descarga sus samples (útil con datos móviles); su LED se apaga en la barra de abajo.
+- **Parameter Locks:** con *Lock knobs*, las perillas guardan valores propios del paso elegido (por ejemplo, un
+  Cutoff más abierto solo en el paso 5), como en las Elektron. En Drums se hace con *Edit steps*. Un punto
+  amarillo en el paso indica que tiene valores propios.
+- **Chance:** cada paso puede sonar el 100, 75, 50 o 25 % de las veces, para patrones menos mecánicos (anillo en
+  el paso). La exportación usa siempre la misma secuencia de azar, así un WAV se puede repetir.
+- **Pintar pasos:** en Drums, deslizar el dedo de lado sobre los pasos los enciende o apaga de una pasada.
+
 - **Deshacer y rehacer** (↶ ↷ o Ctrl/⌘+Z): cada cambio queda en el historial; un giro de perilla cuenta como uno.
 - **Proyectos** (en Song): varios proyectos con nombre, nuevo, duplicar y borrar. **Guardar archivo** y **Abrir archivo**
   (`.drumseq.json`) para respaldarlos o pasarlos a otro equipo.
 - **Grabar en vivo** (Rec): con la reproducción en marcha, lo que tocas en el teclado o en los sonidos de batería
   queda en el paso que suena, cuantizado a semicorcheas.
 - **Exportar por pistas**: con "As stems", cada máquina sale en su propio WAV (con su delay y reverb, sin el compresor
-  general) para terminar el tema en un DAW.
+  general) para terminar el tema en un DAW. Antes de exportar se calcula el tamaño y se avisa si es demasiado
+  grande para el dispositivo.
 
 ## Pensado para el móvil
 
@@ -166,11 +176,24 @@ La primera vez que eliges cada caja de ritmos o sonido de Keys, sus samples se d
 - Samples de batería: [smpldsnds/drum-machines](https://github.com/smpldsnds/drum-machines) (dominio público) y la
   colección [Synth Abuse](https://www.youtube.com/@synthabuse) (también los Character de las máquinas de la era de
   los samplers).
-- Keys: cintas del Mellotron del [Mellotron Archive](https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z)
-  (licencia no declarada), pianos eléctricos de Greg Sullivan
-  ([CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)) y el TX81Z de [VCSL](https://github.com/sgossner/VCSL)
-  (CC0), preparados por [smpldsnds](https://github.com/smpldsnds).
+- Keys:
+  - Mellotron: [smpldsnds/archiveorg-mellotron](https://github.com/smpldsnds/archiveorg-mellotron), hecho a partir
+    del CD-ROM [Mellotron Archive](https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z) de Internet
+    Archive (licencia no declarada).
+  - Pianos eléctricos de Greg Sullivan:
+    [sfzinstruments/GregSullivan.E-Pianos](https://github.com/sfzinstruments/GregSullivan.E-Pianos)
+    ([CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)), servidos por
+    [smpldsnds](https://github.com/smpldsnds/sfzinstruments-greg-sullivan-e-pianos).
+  - TX81Z: [VCSL](https://github.com/sgossner/VCSL) (CC0), servido por
+    [smpldsnds](https://github.com/smpldsnds/sgossner-vcsl).
 - Todo se reproduce con [smplr](https://github.com/danigb/smplr).
 - Tipografías: [Archivo](https://github.com/Omnibus-Type/Archivo) y [DSEG](https://github.com/keshikan/DSEG) de keshikan (SIL Open Font License).
+
+El detalle de cada componente y su licencia está en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Licencia
+
+El código de drum_seq se publica bajo licencia [MIT](LICENSE). Los motores, tipografías y sonidos de terceros
+conservan sus propias licencias.
 
 Desarrollado por Gustavo Astudillo.

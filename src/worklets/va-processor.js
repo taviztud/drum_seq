@@ -2,6 +2,7 @@
 // Per voice: two PolyBLEP oscillators (saw to pulse, detuned) plus a sub in mono, a 4-pole ladder
 // filter (zero-delay-feedback, saturating input) and filter/amp envelopes. Same note events as Open303.
 
+const NO_LOCKS = Object.freeze({});
 const POLY_VOICES = 6;
 const CONTROL_EVERY = 8; // samples between pitch/filter/envelope-shape updates
 const midiToHz = (p) => 440 * 2 ** ((p - 69) / 12);
@@ -231,6 +232,7 @@ class VaProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this.synth = new Synth(sampleRate);
+    this.lock = NO_LOCKS; // parameter locks of the last note: they win over the knobs until the next note
     this.queue = (options.processorOptions?.events ?? []).slice().sort((a, b) => a.time - b.time);
     this.port.onmessage = ({ data }) => {
       if (data.type === 'events') {
@@ -246,15 +248,19 @@ class VaProcessor extends AudioWorkletProcessor {
   process(_inputs, outputs, params) {
     const out = outputs[0][0];
     const synth = this.synth;
-    for (const name of PARAMS) synth.p[name] = params[name][0];
+    const lock = this.lock;
+    for (const name of PARAMS) synth.p[name] = lock[name] ?? params[name][0];
     synth.setMono(params.mono[0] >= 0.5);
     let e = 0;
     for (let i = 0; i < out.length; i++) {
       const t = currentTime + i / sampleRate;
       while (e < this.queue.length && this.queue[e].time <= t) {
         const ev = this.queue[e++];
-        if (ev.kind === 'on') synth.noteOn(ev.key, ev.accent);
-        else synth.noteOff(ev.key);
+        if (ev.kind === 'on') {
+          this.lock = ev.locks ?? NO_LOCKS;
+          for (const name of PARAMS) synth.p[name] = this.lock[name] ?? params[name][0];
+          synth.noteOn(ev.key, ev.accent); // resets the control counter: the new values apply on this sample
+        } else synth.noteOff(ev.key);
       }
       out[i] = synth.tick();
     }

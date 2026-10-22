@@ -4,6 +4,7 @@
 // DecayEnvelope, AnalogEnvelope, LeakyIntegrator, OnePoleFilter, BiquadFilter and the 4x
 // oversampling decimator (EllipticQuarterBandFilter). Note handling follows Open303::noteOn.
 
+const NO_LOCKS = Object.freeze({});
 const OVERSAMPLING = 4;
 const TABLE_LENGTH = 2048;
 const NUM_TABLES = 12;
@@ -354,6 +355,7 @@ class Open303Processor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this.voice = new Open303(sampleRate);
+    this.lock = NO_LOCKS; // parameter locks of the note playing: they win over the knobs until the next note
     this.queue = (options.processorOptions?.events ?? []).slice().sort((a, b) => a.time - b.time);
     this.port.onmessage = ({ data }) => {
       if (data.type === 'events') {
@@ -368,10 +370,11 @@ class Open303Processor extends AudioWorkletProcessor {
 
   applyParams(p) {
     const v = this.voice;
-    v.setCutoff(linToExp(p.cutoff[0], 314, 2394));
-    v.filter.setResonance(p.resonance[0] * 100);
-    v.setEnvMod(p.envMod[0] * 100);
-    v.normalDecay = linToExp(p.decay[0], 200, 2000);
+    const lock = this.lock;
+    v.setCutoff(linToExp(lock.cutoff ?? p.cutoff[0], 314, 2394));
+    v.filter.setResonance((lock.resonance ?? p.resonance[0]) * 100);
+    v.setEnvMod((lock.envMod ?? p.envMod[0]) * 100);
+    v.normalDecay = linToExp(lock.decay ?? p.decay[0], 200, 2000);
     v.accent = p.accent[0];
     v.blend = p.waveform[0];
     v.tuning = 440 * 2 ** (p.tune[0] / 12);
@@ -386,8 +389,11 @@ class Open303Processor extends AudioWorkletProcessor {
       const t = blockStart + i / sampleRate;
       while (e < this.queue.length && this.queue[e].time <= t) {
         const ev = this.queue[e++];
-        if (ev.kind === 'on') this.voice.noteOn(ev.key, ev.accent);
-        else this.voice.noteOff(ev.key);
+        if (ev.kind === 'on') {
+          this.lock = ev.locks ?? NO_LOCKS;
+          this.applyParams(params); // locks take effect on this very sample
+          this.voice.noteOn(ev.key, ev.accent);
+        } else this.voice.noteOff(ev.key);
       }
       out[i] = this.voice.tick();
     }

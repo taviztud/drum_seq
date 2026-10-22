@@ -42,8 +42,9 @@ export function advance(project, cursor, queuedScene = null) {
 /**
  * Events for the step the cursor points at. `time` is when the step starts (before swing).
  * Returns drum hits, note events per note machine, and the updated held keys.
+ * `rng` rolls each step's chance: Math.random live, a seeded one for repeatable exports.
  */
-export function stepEvents(project, cursor, time, stepSec) {
+export function stepEvents(project, cursor, time, stepSec, rng = Math.random) {
   const scene = project.scenes[cursor.scene];
   const step = cursor.pos;
   const offset = swingOffset(project.swing, stepSec);
@@ -53,17 +54,23 @@ export function stepEvents(project, cursor, time, stepSec) {
   const voices = project.drums.voices;
   const soloing = VOICES.some((v) => voices[v.id].solo);
   const plays = (id) => !voices[id].mute && (!soloing || voices[id].solo);
+  const powered = (id) => project.power?.[id] !== false;
+  const lucky = (prob) => prob === undefined || prob >= 1 || rng() < prob;
   const drums = [];
-  for (const { id } of VOICES) {
+  for (const { id } of powered('drums') ? VOICES : []) {
     if (!scene.drums[id][step] || !plays(id)) continue;
+    const meta = scene.drumMeta?.[id]?.[step];
+    if (!lucky(meta?.prob)) continue;
     const gate = gateSeconds(gateSteps(pattern, id, step, plays), step, stepSec, offset);
-    drums.push({ voice: id, time: at, accent: scene.drums.ac[step], gate });
+    drums.push(meta ? { voice: id, time: at, accent: scene.drums.ac[step], gate, meta } : { voice: id, time: at, accent: scene.drums.ac[step], gate });
   }
 
   const held = {};
   const notes = {};
   for (const [id, track] of Object.entries(NOTE_TRACKS)) {
-    const result = noteStep(track.line(scene), step, cursor.held[id], { base: track.base + cursor.tr, poly: track.poly(project) });
+    const line = track.line(scene);
+    const skip = !powered(id) || (line[step].on && !lucky(line[step].prob)); // a skipped step plays as a rest
+    const result = noteStep(line, step, cursor.held[id], { base: track.base + cursor.tr, poly: track.poly(project), skip });
     held[id] = result.held;
     notes[id] = result.events.map(({ at: steps, ...e }) => ({ ...e, time: at + steps * stepSec }));
   }
@@ -78,11 +85,13 @@ export function planRender(project, { song = false, bars = 4 } = {}) {
   const stepSec = 60 / project.bpm / 4;
   const forced = song ? null : project.scene;
   let cursor = startCursor();
+  let seed = 1;
+  const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647); // same chance rolls on every export
   const drums = [];
   const notes = noTracks(() => []);
   for (let i = 0; i < totalSteps; i++) {
     cursor = advance(p, cursor, forced);
-    const ev = stepEvents(p, cursor, i * stepSec, stepSec);
+    const ev = stepEvents(p, cursor, i * stepSec, stepSec, rng);
     cursor.held = ev.held;
     drums.push(...ev.drums);
     for (const id in notes) notes[id].push(...ev.notes[id]);

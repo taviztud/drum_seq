@@ -40,7 +40,7 @@ test('note names, octaves and presets parse', () => {
 
 test('bass data from storage is repaired', () => {
   const s = normalizeBass([{ on: true, note: 40, oct: 5, accent: 'yes' }, null], 4);
-  assert.deepEqual(s[0], { on: true, note: 0, oct: 0, accent: false, slide: false, chord: '', len: 1 });
+  assert.deepEqual(s[0], { on: true, note: 0, oct: 0, accent: false, slide: false, chord: '', len: 1, prob: 1 });
   assert.equal(s.length, 4);
   assert.equal(resizeBass(createBass(4), 8).length, 8);
 });

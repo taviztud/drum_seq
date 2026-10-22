@@ -1,11 +1,12 @@
 {
   "name": "drum_seq",
-  "version": "1.0.0",
+  "version": "3.4.0",
   "private": true,
-  "description": "Step sequencer with sampled classic drum machines",
+  "description": "Pocket studio of vintage machines in the browser: TB-303 bass, analog synth, sampled keys and drum machines",
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8000",
     "test": "node --test"
-  }
+  },
+  "license": "MIT"
 }
