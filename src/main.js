@@ -64,7 +64,8 @@ const app = {
   changed(kind) {
     save();
     if (kind !== 'ui') record();
-    if (kind === 'sound' || kind === 'mix') app.rack?.apply(app.project);
+    if (kind === 'sound' || kind === 'mix' || kind === 'power') app.rack?.apply(app.project);
+    if (kind === 'power') { loadSound('kit'); loadSound('keys'); renderPower(); }
     if (kind === 'kit') loadSound('kit');
     if (kind === 'keys') loadSound('keys');
     if (kind === 'song') { renderScenes(); views.song.render(); }
@@ -141,10 +142,11 @@ function setProject(project, { keepHistory = false } = {}) {
   if (!keepHistory) { history.undo = []; history.redo = []; }
   renderHistory();
   app.rack?.apply(project);
-  if (currentKit(project.drums).id !== currentKit(before.drums).id) loadSound('kit');
-  if (project.keys.sound !== before.keys.sound) loadSound('keys');
+  if (currentKit(project.drums).id !== currentKit(before.drums).id || project.power.drums !== before.power.drums) loadSound('kit');
+  if (project.keys.sound !== before.keys.sound || project.power.keys !== before.power.keys) loadSound('keys');
   showBpm();
   rebuildAll();
+  renderPower();
   flush();
 }
 
@@ -217,6 +219,10 @@ $('.tabs').addEventListener('click', (e) => {
 });
 const tabLeds = Object.fromEntries(tabs.map((t) => [t.dataset.tab, t.querySelector('.tab-led')]).filter(([, led]) => led));
 const flash = (el) => el?.animate([{ opacity: 1 }, { opacity: 0.25 }], { duration: 140 });
+// A machine switched off shows a dark tab LED.
+function renderPower() {
+  for (const [id, led] of Object.entries(tabLeds)) led.closest('[data-tab]').classList.toggle('off', app.project.power[id] === false);
+}
 
 // ---------- Scenes ----------
 
@@ -374,14 +380,15 @@ function draw() {
 
 // Load the drum kit or the keyboard sound the project asks for, showing progress on its machine.
 const SOUND_SLOTS = {
-  kit: { find: () => currentKit(app.project.drums), view: () => views.drums, load: (def, cb) => app.rack.loadKit(def, cb) },
-  keys: { find: () => findKeySound(app.project.keys.sound), view: () => views.keys, load: (def, cb) => app.rack.loadKeys(def, cb) },
+  kit: { machine: 'drums', find: () => currentKit(app.project.drums), view: () => views.drums, load: (def, cb) => app.rack.loadKit(def, cb) },
+  keys: { machine: 'keys', find: () => findKeySound(app.project.keys.sound), view: () => views.keys, load: (def, cb) => app.rack.loadKeys(def, cb) },
 };
 async function loadSound(slot) {
   if (!app.rack) return;
-  const { find, view, load } = SOUND_SLOTS[slot];
+  const { machine, find, view, load } = SOUND_SLOTS[slot];
   const def = find();
   const show = (text, state) => find().id === def.id && view().setStatus(text, state); // a newer pick owns the status line
+  if (!app.project.power[machine]) return show(`${def.name}: switched off, nothing loaded`, 'off'); // saves data on phones
   show(`Loading ${def.name}…`, 'loading');
   try {
     await load(def, ({ loaded, total }) => show(`Loading ${def.name}… ${loaded}/${total}`, 'loading'));
@@ -414,6 +421,7 @@ showBpm();
 let savedTab = null;
 try { savedTab = localStorage.getItem(TAB_KEY); } catch { /* ignore */ }
 rebuildAll();
+renderPower();
 showTab(savedTab);
 startAudio();
 requestAnimationFrame(draw);

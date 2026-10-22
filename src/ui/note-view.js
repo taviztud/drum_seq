@@ -17,6 +17,18 @@ const CHORD_LABELS = [['', 'Note'], ['maj', 'Maj'], ['min', 'Min'], ['7', '7'], 
 const CHORD_SPOKEN = { maj: 'major', min: 'minor', 7: 'seventh', m7: 'minor seventh', sus4: 'suspended fourth', dim: 'diminished' };
 const CHORD_TAGS = { maj: '', min: 'm', 7: '7', m7: 'm7', sus4: 'sus', dim: '°' };
 
+// On/Off switch for a machine's plate: off makes no sound and loads nothing.
+export const powerButton = (title) => `<button type="button" class="power" aria-label="${title} power"><span class="power-led" aria-hidden="true"></span><span class="power-text"></span></button>`;
+export function renderPower(root, on) {
+  const b = root.querySelector('.power');
+  b.ariaPressed = String(on);
+  b.querySelector('.power-text').textContent = on ? 'On' : 'Off';
+  root.classList.toggle('off', !on);
+}
+// How likely a step is to play, Elektron-style.
+export const CHANCES = [1, 0.75, 0.5, 0.25];
+export const chanceRow = () => `<div class="seg chance" role="group" aria-label="Chance this step plays">${CHANCES.map((c) => `<button type="button" data-chance="${c}">${c * 100}%</button>`).join('')}</div>`;
+
 function describe(step, i, { chords }) {
   if (!step.on) return `Step ${i + 1}: rest`;
   const parts = [SPOKEN[step.note]];
@@ -25,17 +37,22 @@ function describe(step, i, { chords }) {
   if (step.len > 1) parts.push(`${step.len} steps long`);
   if (step.accent) parts.push('accent');
   if (step.slide) parts.push('slide');
+  if (step.prob < 1) parts.push(`${step.prob * 100}% chance`);
+  if (step.locks) parts.push('locked knobs');
   return `Step ${i + 1}: ${parts.join(', ')}`;
 }
 
 /**
  * config: { id, kind ('bass' | 'synth' | 'keys'), title, num, maker, plate (class list), line(), setLine(line), knobs: [{ id, label, min, max,
  * default, format, step }], values() (object the knobs edit), switches: [{ label, options: [[value, text]],
- * get(), set(value) }], base, chords(), lengths, slide(), linePresets, header (optional HTML) }
+ * get(), set(value) }], base, chords(), lengths, slide(), linePresets, lockable (knob ids a step can lock),
+ * header (optional HTML) }
  */
 export function createNoteView(root, app, config) {
   let selected = 0;
   let density = 'some'; // how busy Random makes the line; per machine, not saved
+  let locking = false; // Lock mode: knobs edit the selected step's own values (parameter locks)
+  const lockable = new Set(config.lockable ?? []);
   const chords = () => config.chords?.() ?? false;
   const slide = () => config.slide?.() ?? false;
   root.classList.add('machine', ...config.plate);
@@ -43,6 +60,7 @@ export function createNoteView(root, app, config) {
     <header class="plate-head">
       <h2 class="logo">${config.title}${config.num ? ` <span class="logo-num">${config.num}</span>` : ''}</h2>
       <p class="maker">${config.maker}</p>
+      ${powerButton(config.title)}
     </header>
     ${config.header ?? ''}
     <div class="knobs"></div>
@@ -66,6 +84,11 @@ export function createNoteView(root, app, config) {
         <output aria-labelledby="${config.id}-len"></output>
         <button type="button" data-len="1" aria-label="Longer">+</button>
       </div>
+      <div class="row step-extra">
+        <button type="button" class="toggle" data-lock aria-pressed="false">Lock knobs</button>
+        <button type="button" data-clear-locks>Clear locks</button>
+        ${chanceRow()}
+      </div>
     </div>
     <div class="row tools">
       <button type="button" data-tool="random">Random</button>
@@ -80,7 +103,11 @@ export function createNoteView(root, app, config) {
   const knobs = config.knobs.map((k) => {
     const el = knob({
       ...k, value: config.values()[k.id], defaultValue: k.default,
-      onInput: (v) => { config.values()[k.id] = v; app.changed('sound'); },
+      onInput: (v) => {
+        const step = config.line()[selected];
+        if (locking && lockable.has(k.id) && step.on) { step.locks = { ...step.locks, [k.id]: v }; app.changed('pattern'); renderPads(); }
+        else { config.values()[k.id] = v; app.changed('sound'); }
+      },
     });
     el.dataset.knob = k.id;
     return el;
@@ -129,7 +156,7 @@ export function createNoteView(root, app, config) {
       b.type = 'button';
       b.className = 'pad';
       b.dataset.step = i;
-      b.innerHTML = '<span class="pad-led"></span><span class="pad-note"></span><span class="pad-oct"></span>';
+      b.innerHTML = '<span class="pad-led"></span><span class="pad-mark"></span><span class="pad-note"></span><span class="pad-oct"></span>';
       return b;
     }));
     pads = [...padsEl.children];
@@ -137,6 +164,33 @@ export function createNoteView(root, app, config) {
   }
 
   function render() {
+    renderPads();
+    const line = config.line();
+    const s = line[selected];
+    for (const k of keys.children) k.ariaPressed = String(s.on && Number(k.dataset.note) === s.note);
+    for (const b of root.querySelectorAll('[data-oct]')) b.ariaPressed = String(Number(b.dataset.oct) === s.oct);
+    for (const mod of ['accent', 'slide']) root.querySelector(`[data-mod="${mod}"]`).ariaPressed = String(s[mod]);
+    root.querySelector('[data-mod="slide"]').hidden = !slide();
+    root.querySelector('[data-mod="rest"]').ariaPressed = String(!s.on);
+    chordRow.hidden = !chords();
+    for (const b of chordRow.children) b.ariaPressed = String(b.dataset.chord === s.chord);
+    root.querySelector('.length-row output').textContent = `${s.len} step${s.len > 1 ? 's' : ''}`;
+    for (const { sw, seg } of switches) for (const b of seg.children) b.ariaPressed = String(b.value === String(sw.get()));
+    // In Lock mode the knobs show the selected step's own values where it has them.
+    for (const k of knobs) {
+      const id = k.dataset.knob;
+      k.update(locking && s.locks?.[id] !== undefined ? s.locks[id] : config.values()[id]);
+      k.classList.toggle('locked', locking && s.locks?.[id] !== undefined);
+      k.classList.toggle('unlockable', locking && !lockable.has(id));
+    }
+    root.querySelector('[data-lock]').ariaPressed = String(locking);
+    root.querySelector('[data-clear-locks]').disabled = !s.locks;
+    for (const b of root.querySelectorAll('[data-chance]')) b.ariaPressed = String(Number(b.dataset.chance) === s.prob);
+    for (const b of root.querySelectorAll('[data-density]')) b.ariaPressed = String(b.dataset.density === density);
+    renderPower(root, app.project.power[config.id]);
+  }
+
+  function renderPads() {
     const line = config.line();
     if (pads.length !== line.length) buildPads();
     const ties = new Set(); // rest steps still covered by an earlier long note
@@ -148,24 +202,14 @@ export function createNoteView(root, app, config) {
       pad.classList.toggle('slide', s.on && slide() && s.slide && line[(i + 1) % line.length].on);
       pad.classList.toggle('tied', ties.has(i));
       pad.classList.toggle('selected', i === selected);
+      pad.classList.toggle('locks', s.on && !!s.locks);
+      pad.classList.toggle('chance', s.on && s.prob < 1);
       const tag = chords() && s.chord ? CHORD_TAGS[s.chord] : '';
       pad.querySelector('.pad-note').textContent = s.on ? NOTE_NAMES[s.note] + tag : ties.has(i) ? '' : '–';
       pad.querySelector('.pad-oct').textContent = s.on && s.oct ? (s.oct > 0 ? '▲' : '▼') : '';
       pad.setAttribute('aria-label', describe(s, i, { chords: chords() }) + (ties.has(i) ? ', held' : ''));
       pad.ariaCurrent = i === selected ? 'true' : null;
     });
-    const s = line[selected];
-    for (const k of keys.children) k.ariaPressed = String(s.on && Number(k.dataset.note) === s.note);
-    for (const b of root.querySelectorAll('[data-oct]')) b.ariaPressed = String(Number(b.dataset.oct) === s.oct);
-    for (const mod of ['accent', 'slide']) root.querySelector(`[data-mod="${mod}"]`).ariaPressed = String(s[mod]);
-    root.querySelector('[data-mod="slide"]').hidden = !slide();
-    root.querySelector('[data-mod="rest"]').ariaPressed = String(!s.on);
-    chordRow.hidden = !chords();
-    for (const b of chordRow.children) b.ariaPressed = String(b.dataset.chord === s.chord);
-    root.querySelector('.length-row output').textContent = `${s.len} step${s.len > 1 ? 's' : ''}`;
-    for (const { sw, seg } of switches) for (const b of seg.children) b.ariaPressed = String(b.value === String(sw.get()));
-    for (const k of knobs) k.update(config.values()[k.dataset.knob]);
-    for (const b of root.querySelectorAll('[data-density]')) b.ariaPressed = String(b.dataset.density === density);
   }
 
   const edit = (fn) => { fn(config.line()[selected]); app.changed('pattern'); render(); };
@@ -215,6 +259,18 @@ export function createNoteView(root, app, config) {
     if (!b) return;
     edit((s) => { s.chord = b.dataset.chord; s.on = true; });
     audition(config.line()[selected]);
+  });
+  root.querySelector('.step-extra').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-lock')) { locking = !locking; render(); return; }
+    if (b.hasAttribute('data-clear-locks')) edit((s) => { delete s.locks; });
+    else if (b.dataset.chance) edit((s) => { s.prob = Number(b.dataset.chance); });
+  });
+  root.querySelector('.power').addEventListener('click', () => {
+    app.project.power[config.id] = !app.project.power[config.id];
+    app.changed('power');
+    render();
   });
   root.querySelector('.length-row').addEventListener('click', (e) => {
     const delta = Number(e.target.closest('[data-len]')?.dataset.len);
@@ -271,7 +327,7 @@ export function createBassView(root, app) {
     line: () => app.scene().bass[0], setLine: (line) => { app.scene().bass[0] = line; },
     knobs: BASS_KNOB_VIEW, values: settings,
     switches: [{ label: 'Waveform', options: [[0, 'Saw'], [1, 'Square']], get: () => Math.round(settings().waveform), set: (v) => { settings().waveform = v; } }],
-    slide: () => true, linePresets: BASS_PRESET_NAMES,
+    slide: () => true, linePresets: BASS_PRESET_NAMES, lockable: ['cutoff', 'resonance', 'envMod', 'decay'],
   });
 }
 
@@ -300,7 +356,7 @@ export function createSynthView(root, app) {
       { label: 'Chorus', options: [[0, 'Chorus off'], [1, 'I'], [2, 'II']], get: () => synth().chorus, set: (v) => { synth().chorus = v; } },
     ],
     chords: () => synth().mode === 'poly', slide: () => synth().mode === 'mono', lengths: true,
-    linePresets: MELODY_PRESET_NAMES,
+    linePresets: MELODY_PRESET_NAMES, lockable: ['cutoff', 'reso', 'env', 'release'],
   });
   root.querySelector('[data-sound-preset]').addEventListener('change', (e) => {
     if (!e.target.value) return;
@@ -324,7 +380,7 @@ export function createKeysView(root, app) {
       { id: 'release', label: 'Release', min: 0, max: 1, default: 0.35, format: (v) => time(0.05 + v ** 2 * 3) },
     ],
     values: () => app.project.keys.knobs,
-    chords: () => true, lengths: true, linePresets: MELODY_PRESET_NAMES,
+    chords: () => true, lengths: true, linePresets: MELODY_PRESET_NAMES, lockable: ['tone', 'release'],
   });
   const select = root.querySelector('[data-keys-sound]');
   const status = root.querySelector('.kit-status');

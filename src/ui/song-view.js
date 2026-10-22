@@ -2,10 +2,13 @@ import { SCENES, CHANNELS, MAX_SONG_LENGTH, NAME_MAX, createScene, copyScene, re
 import { STEP_OPTIONS } from '../pattern.js';
 import { NOTE_NAMES } from '../bass.js';
 import { SCALE_NAMES, transposeLine } from '../generate.js';
+import { exportBytes } from '../rack.js';
 
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
 const rootName = (n) => NOTE_NAMES[((n % 12) + 12) % 12];
 const STEM_NAMES = { bass1: 'bass', synth: 'synth', keys: 'keys', drums: 'drums' };
+// The render holds the song as float samples plus the finished WAV in memory: past this a phone may run out.
+const EXPORT_LIMIT_BYTES = 400e6;
 const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'jam';
 
 // Hand files to the phone's share sheet (save to Files, send to a DAW), or download them.
@@ -93,11 +96,14 @@ export function createSongView(root, app) {
     <footer class="credits">
       <p>Bass voices: <a href="https://github.com/RobinSchmidt/Open303">Open303</a> by Robin Schmidt (MIT), ported to Web Audio.
       Drum samples from <a href="https://github.com/smpldsnds">smpldsnds</a> and the <a href="https://www.youtube.com/@synthabuse">Synth Abuse</a> collection,
-      Keys: Mellotron tapes from the <a href="https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z">Mellotron Archive</a>,
-      electric pianos by Greg Sullivan (<a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>) and the TX81Z from
-      <a href="https://github.com/sgossner/VCSL">VCSL</a> (CC0), via smpldsnds.
+      Keys: Mellotron tapes from <a href="https://github.com/smpldsnds/archiveorg-mellotron">smpldsnds/archiveorg-mellotron</a>
+      (made from the <a href="https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z">Mellotron Archive</a> CD-ROM),
+      electric pianos by Greg Sullivan from <a href="https://github.com/sfzinstruments/GregSullivan.E-Pianos">sfzinstruments/GregSullivan.E-Pianos</a>
+      (<a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>) and the TX81Z from
+      <a href="https://github.com/sgossner/VCSL">VCSL</a> (CC0), all served by smpldsnds.
       Played with <a href="https://github.com/danigb/smplr">smplr</a>. Type: Archivo and DSEG7 by keshikan (OFL).</p>
-      <p>By Gustavo Astudillo. <a href="https://github.com/taviztud/drum_seq">Source code on GitHub</a>.</p>
+      <p>By Gustavo Astudillo. <a href="https://github.com/taviztud/drum_seq">Source code on GitHub</a> (MIT);
+      every component and its license in <a href="https://github.com/taviztud/drum_seq/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES</a>.</p>
     </footer>`;
 
   const chain = root.querySelector('.chain');
@@ -268,7 +274,14 @@ export function createSongView(root, app) {
     try {
       const range = kind === 'song' ? { song: true } : { bars: 4 };
       const base = `${slug(app.project.name)}-${kind}-${app.project.bpm}bpm`;
-      const parts = root.querySelector('[data-stems]').checked ? CHANNELS : [null];
+      const stems = root.querySelector('[data-stems]').checked;
+      const parts = stems ? CHANNELS.filter((id) => app.project.power[id]) : [null]; // machines switched off make no stem
+      if (!parts.length) throw new Error('every machine is switched off.');
+      const total = exportBytes(app.project, range) * parts.length;
+      if (total > EXPORT_LIMIT_BYTES) {
+        throw new Error(`it would be ${Math.round(total / 1e6)} MB, more than this device can safely hold. Export fewer bars, a faster tempo or without stems.`);
+      }
+      exportStatus.textContent = `About ${(total / 1e6).toFixed(0)} MB to render…`;
       const files = [];
       for (const [n, only] of parts.entries()) {
         const label = only ? ` ${STEM_NAMES[only]} (${n + 1}/${parts.length})` : '';

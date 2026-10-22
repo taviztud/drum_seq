@@ -11,6 +11,12 @@ const WORKLETS = ['open303-processor.js', 'va-processor.js'].map((f) => new URL(
 const NODE_TRACKS = ['bass1', 'synth']; // machines played by an AudioWorklet voice
 const RELEASE = 0.015; // drum choke/retrigger release in seconds, near-instant like the hardware
 const TAIL = 3; // seconds of delay and reverb tail kept at the end of an export
+const EXPORT_RATE = 44100;
+const KEEP = 2; // decoded instruments kept per slot: the one playing and the previous one, for quick A/B
+const TRIM = { keys: 2 }; // input gain per channel: the tape and piano samples are recorded quiet
+
+// Bytes of the 16-bit stereo WAV an export makes, so a too-long render can be refused before it starts.
+export const exportBytes = (project, options) => 44 + Math.ceil((planRender(project, options).duration + TAIL) * EXPORT_RATE) * 4;
 // Juno-60/106 chorus modes: LFO rate (Hz) and delay sweep (s). Index 0 is off.
 const CHORUS = [null, { rate: 0.5, depth: 0.0018 }, { rate: 0.83, depth: 0.0026 }];
 
@@ -84,8 +90,8 @@ function buildGraph(ctx, project, noteEvents = {}) {
 
   const channels = {};
   for (const id of CHANNELS) {
-    const input = new GainNode(ctx);
-    const drive = BASSES.includes(id) ? new WaveShaperNode(ctx, { oversample: '4x' }) : null;
+    const input = new GainNode(ctx, { gain: TRIM[id] ?? 1 });
+    const drive = id === 'drums' ? null : new WaveShaperNode(ctx, { oversample: '4x' }); // tape-style saturation, 4x oversampled
     const fader = new GainNode(ctx);
     const pan = new StereoPannerNode(ctx);
     const send = new GainNode(ctx);
@@ -98,7 +104,6 @@ function buildGraph(ctx, project, noteEvents = {}) {
     pan.connect(meter);
     channels[id] = { input, drive, fader, pan, send, verb, meter };
   }
-  channels.keys.input.gain.value = 2; // the tape and piano samples are recorded quiet
 
   const voice = (processor, id) => {
     const node = new AudioWorkletNode(ctx, processor, {
@@ -129,14 +134,14 @@ function buildGraph(ctx, project, noteEvents = {}) {
     const soloing = CHANNELS.some((id) => p.mixer[id].solo);
     for (const id of CHANNELS) {
       const m = p.mixer[id];
-      const audible = !m.mute && (!soloing || m.solo);
+      const audible = p.power?.[id] !== false && !m.mute && (!soloing || m.solo);
       smooth(channels[id].fader.gain, audible ? m.level ** 2 : 0); // squared: feels like an audio taper
       smooth(channels[id].pan.pan, m.pan);
       smooth(channels[id].send.gain, m.delay);
       smooth(channels[id].verb.gain, m.reverb);
       if (channels[id].drive && lastDrive[id] !== m.drive) {
         channels[id].drive.curve = m.drive > 0 ? driveCurve(m.drive) : null;
-        channels[id].input.gain.value = 1 / (1 + m.drive * 0.6); // keep loudness roughly even
+        channels[id].input.gain.value = (TRIM[id] ?? 1) / (1 + m.drive * 0.6); // keep loudness roughly even
         lastDrive[id] = m.drive;
       }
     }
@@ -209,18 +214,25 @@ function triggerDrum(kit, hit, params) {
   });
 }
 
-// Keys get one start per note with its length; the plan's note-offs give that length.
+// A drum hit's sound: the voice's knobs, with the hit's own locks on top.
+const hitParams = (p, hit) => (hit.meta ? { ...p.drums.voices[hit.voice], ...hit.meta } : p.drums.voices[hit.voice]);
+
+// Keys get one start per note with its length; the plan's note-offs give that length. A step's locks
+// (tone, release) apply to its notes only.
 function triggerKeys(inst, events, knobs) {
   if (!inst) return [];
   const offs = events.filter((e) => e.kind === 'off');
-  return events.filter((e) => e.kind === 'on').map((e) => ({
-    time: e.time,
-    stop: inst.start({
-      note: e.key, time: e.time, velocity: e.accent ? KEY_VELOCITY.accent : KEY_VELOCITY.normal,
-      duration: (offs.find((o) => o.key === e.key && o.time > e.time)?.time ?? e.time + 0.25) - e.time,
-      lpfCutoffHz: 300 * 66 ** knobs.tone, ampRelease: 0.05 + knobs.release ** 2 * 3,
-    }),
-  }));
+  return events.filter((e) => e.kind === 'on').map((e) => {
+    const k = e.locks ? { ...knobs, ...e.locks } : knobs;
+    return {
+      time: e.time,
+      stop: inst.start({
+        note: e.key, time: e.time, velocity: e.accent ? KEY_VELOCITY.accent : KEY_VELOCITY.normal,
+        duration: (offs.find((o) => o.key === e.key && o.time > e.time)?.time ?? e.time + 0.25) - e.time,
+        lpfCutoffHz: 300 * 66 ** k.tone, ampRelease: 0.05 + k.release ** 2 * 3,
+      }),
+    };
+  });
 }
 
 /**
@@ -250,7 +262,18 @@ export async function createRack({ project, queued, onStep }) {
       loaded.set(key, ready);
     }
     const inst = await loaded.get(key);
-    if (token === tokens[slot]) current[slot] = { def, inst };
+    if (token === tokens[slot]) {
+      current[slot] = { def, inst };
+      // Most recently used goes last; beyond KEEP per slot, free the oldest instruments' sample buffers.
+      const ready = loaded.get(key);
+      loaded.delete(key);
+      loaded.set(key, ready);
+      const mine = [...loaded.keys()].filter((k) => k.startsWith(`${slot}:`));
+      for (const old of mine.slice(0, -KEEP)) {
+        loaded.get(old).then((i) => i.dispose?.(), () => {});
+        loaded.delete(old);
+      }
+    }
     return def;
   }
 
@@ -264,7 +287,7 @@ export async function createRack({ project, queued, onStep }) {
     cursor.held = ev.held;
     pending = pending.filter((n) => n.time > ctx.currentTime);
     for (const hit of ev.drums) {
-      const stop = triggerDrum(current.kit, hit, p.drums.voices[hit.voice]);
+      const stop = triggerDrum(current.kit, hit, hitParams(p, hit));
       if (stop) pending.push({ time: hit.time, stop });
     }
     pending.push(...triggerKeys(current.keys?.inst, ev.notes.keys, p.keys.knobs));
@@ -341,17 +364,18 @@ export async function createRack({ project, queued, onStep }) {
       } : base;
       const plan = planRender(p, options);
       if (plan.duration === 0) throw new Error('Nothing to export: the song is empty.');
-      const sampleRate = 44100;
-      const off = new OfflineAudioContext(2, Math.ceil((plan.duration + TAIL) * sampleRate), sampleRate);
+      const off = new OfflineAudioContext(2, Math.ceil((plan.duration + TAIL) * EXPORT_RATE), EXPORT_RATE);
       await addWorklets(off);
       const offGraph = buildGraph(off, p, plan.notes);
       onProgress?.('Loading samples…');
       const kitDef = currentKit(p.drums);
+      // Load only the samples this render can hear: a bass stem needs neither the kit nor the keys.
+      const needs = (id) => (!only || only === id) && p.power?.[id] !== false;
       const [kit, keys] = await Promise.all([
-        loadKit(off, kitDef, { destination: offGraph.channels.drums.input, storage }),
-        loadKeys(off, findKeySound(p.keys.sound), { destination: offGraph.channels.keys.input, storage }),
+        needs('drums') ? loadKit(off, kitDef, { destination: offGraph.channels.drums.input, storage }) : null,
+        needs('keys') ? loadKeys(off, findKeySound(p.keys.sound), { destination: offGraph.channels.keys.input, storage }) : null,
       ]);
-      for (const hit of plan.drums) triggerDrum({ def: kitDef, inst: kit }, hit, p.drums.voices[hit.voice]);
+      if (kit) for (const hit of plan.drums) triggerDrum({ def: kitDef, inst: kit }, hit, hitParams(p, hit));
       triggerKeys(keys, plan.notes.keys, p.keys.knobs);
       onProgress?.('Rendering…');
       return audioBufferToWav16(await off.startRendering());

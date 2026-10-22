@@ -39,13 +39,14 @@ export const NAME_MAX = 40;
 export const newId = () => Math.random().toString(36).slice(2, 10);
 
 export function createScene(steps = 16) {
-  return { steps, drums: createPattern(steps).rows, bass: [createBass(steps)], synth: createBass(steps), keys: createBass(steps) };
+  return { steps, drums: createPattern(steps).rows, bass: [createBass(steps)], synth: createBass(steps), keys: createBass(steps), drumMeta: {} };
 }
 
 export function resizeScene(scene, steps) {
   return {
     steps,
     drums: resize({ steps: scene.steps, rows: scene.drums }, steps).rows,
+    drumMeta: normalizeDrumMeta(scene.drumMeta, steps),
     bass: scene.bass.map((b) => resizeBass(b, steps)),
     synth: resizeBass(scene.synth, steps),
     keys: resizeBass(scene.keys, steps),
@@ -55,7 +56,7 @@ export function resizeScene(scene, steps) {
 export const copyScene = (scene) => structuredClone(scene);
 
 function demoScene(drums, bass, synth, keys) {
-  return { steps: 16, drums: presetPattern(drums).rows, bass: [presetBass(bass)], synth: presetBass(synth), keys: presetBass(keys) };
+  return { steps: 16, drums: presetPattern(drums).rows, bass: [presetBass(bass)], synth: presetBass(synth), keys: presetBass(keys), drumMeta: {} };
 }
 
 export function createProject() {
@@ -70,6 +71,7 @@ export function createProject() {
     songMode: false,
     song: [0, 0, 1, 1, 2, 3].map((scene) => ({ scene, tr: 0 })), // tr: transpose in semitones, as the 303's track mode
     key: { root: 0, scale: 'minor' },
+    power: Object.fromEntries(CHANNELS.map((id) => [id, true])), // a machine switched off makes no sound and loads nothing
     scenes: [
       demoScene('House (909)', 'Acid 1', '', 'Chords: long pad'),
       demoScene('House (909)', 'Acid 2', 'Lead: minor run', 'Chords: Cm Ab Eb Bb'),
@@ -88,6 +90,24 @@ export function createProject() {
     },
     fx: { delayDivision: '3/16', feedback: 0.4, comp: 0.4, reverb: 0.8 },
   };
+}
+
+// Per-hit locks and chance for the drums: { [voice]: { [step]: { prob?, level?, tune?, decay?, tone? } } }, sparse.
+const META_RANGES = { prob: [0, 1], level: [0, 100], tune: [-12, 12], decay: [0, 100], tone: [0, 100] };
+export function normalizeDrumMeta(raw, steps) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const { id } of VOICES) {
+    for (const [key, m] of Object.entries(raw[id] ?? {})) {
+      const step = Number(key);
+      if (!Number.isInteger(step) || step < 0 || step >= steps || !m || typeof m !== 'object') continue;
+      const clean = Object.fromEntries(Object.entries(META_RANGES)
+        .filter(([f]) => typeof m[f] === 'number' && Number.isFinite(m[f]))
+        .map(([f, [lo, hi]]) => [f, Math.min(hi, Math.max(lo, m[f]))]));
+      if (Object.keys(clean).length) (out[id] ??= {})[step] = clean;
+    }
+  }
+  return out;
 }
 
 function knobDefaults() {
@@ -122,6 +142,7 @@ export function normalizeProject(raw) {
       return {
         steps,
         drums: normalizePattern({ steps, rows: s.drums }).rows,
+        drumMeta: normalizeDrumMeta(s.drumMeta, steps),
         bass: [normalizeBass(s.bass?.[0], steps)], // older saves had a second 303: dropped
         // Saves from before the synth and keys existed keep the demo lines.
         synth: s.synth ? normalizeBass(s.synth, steps) : resizeBass(fallback.synth, steps),
@@ -130,6 +151,7 @@ export function normalizeProject(raw) {
     });
   }
   p.key = { root: parseInRange(raw.key?.root, 0, 11, 0), scale: Object.hasOwn(SCALES, raw.key?.scale) ? raw.key.scale : 'minor' };
+  for (const id of CHANNELS) p.power[id] = raw.power?.[id] !== false;
   p.drums.kit = findKit(raw.drums?.kit).id;
   if (CHARACTERS.some((c) => c.id === raw.drums?.character)) p.drums.character = raw.drums.character;
   if (VOICES.some((v) => v.id === raw.drums?.selected)) p.drums.selected = raw.drums.selected;

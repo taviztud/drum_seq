@@ -8,7 +8,10 @@ export const MAX_LENGTH = 16;
 // Chord shapes in semitones above the root. '' is a single note.
 export const CHORDS = { '': [0], maj: [0, 4, 7], min: [0, 3, 7], 7: [0, 4, 7, 10], m7: [0, 3, 7, 10], sus4: [0, 5, 7], dim: [0, 3, 6] };
 
-export const emptyStep = () => ({ on: false, note: 0, oct: 0, accent: false, slide: false, chord: '', len: 1 });
+// Knobs a step can lock to its own value (all 0..1), and the chance that a step plays.
+export const LOCKABLE = ['cutoff', 'resonance', 'envMod', 'decay', 'reso', 'env', 'release', 'tone'];
+
+export const emptyStep = () => ({ on: false, note: 0, oct: 0, accent: false, slide: false, chord: '', len: 1, prob: 1 });
 export const createBass = (steps = 16) => Array.from({ length: steps }, emptyStep);
 export const keyOf = (step, base = BASE_KEY) => base + 12 * step.oct + step.note;
 
@@ -28,27 +31,37 @@ export function normalizeBass(raw, steps) {
       slide: s?.slide === true,
       chord: Object.hasOwn(CHORDS, s?.chord) ? s.chord : '',
       len: Number.isInteger(s?.len) && s.len >= 1 && s.len <= MAX_LENGTH ? s.len : 1,
+      prob: unit(s?.prob, 1),
+      ...normalizeLocks(s?.locks),
     };
   });
+}
+
+const unit = (v, fallback) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback);
+// Known knobs only, clamped; no `locks` key at all when there are none, so steps stay small.
+function normalizeLocks(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const locks = Object.fromEntries(LOCKABLE.filter((k) => typeof raw[k] === 'number').map((k) => [k, unit(raw[k], 0)]));
+  return Object.keys(locks).length ? { locks } : {};
 }
 
 /**
  * Turn step `i` into note events. `held` is the key still sounding because the previous step slid
  * into this one (or null). Event times `at` are in steps. A slide keeps the gate open into the next
  * step, so the next note glides instead of retriggering (303 and mono synth). With `poly`, the step's
- * chord sounds and slides are ignored.
+ * chord sounds and slides are ignored. A step's parameter locks ride on its note-on events.
  */
-export function noteStep(line, i, held, { base = BASE_KEY, poly = false } = {}) {
+export function noteStep(line, i, held, { base = BASE_KEY, poly = false, skip = false } = {}) {
   const step = line[i];
   const next = line[(i + 1) % line.length];
   const events = [];
-  if (!step.on) {
+  if (!step.on || skip) { // skip: the machine is off, or the step lost its chance roll
     if (held !== null) events.push({ at: 0, kind: 'off', key: held });
     return { events, held: null };
   }
   const root = keyOf(step, base);
   const keys = poly ? CHORDS[step.chord].map((n) => root + n) : [root];
-  for (const key of keys) events.push({ at: 0, kind: 'on', key, accent: step.accent });
+  for (const key of keys) events.push(step.locks ? { at: 0, kind: 'on', key, accent: step.accent, locks: step.locks } : { at: 0, kind: 'on', key, accent: step.accent });
   if (held !== null) events.push({ at: 0, kind: 'off', key: held }); // after the on: that makes it a slide
   if (!poly && step.slide && next.on) return { events, held: root };
   for (const key of keys) events.push({ at: step.len - GATE, kind: 'off', key });
