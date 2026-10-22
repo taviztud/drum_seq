@@ -34,7 +34,9 @@ export const SYNTH_PRESETS = {
 };
 export const KEYS_KNOBS = { tone: 1, release: 0.35 }; // defaults, 0..1
 export const DRUM_VOICE = { level: 80, tune: 0, decay: 100, tone: 100, mute: false, solo: false };
-export const CHANNEL = { level: 0.8, pan: 0, delay: 0, drive: 0, mute: false, solo: false };
+export const CHANNEL = { level: 0.8, pan: 0, delay: 0, reverb: 0, drive: 0, mute: false, solo: false };
+export const NAME_MAX = 40;
+export const newId = () => Math.random().toString(36).slice(2, 10);
 
 export function createScene(steps = 16) {
   return { steps, drums: createPattern(steps).rows, bass: [createBass(steps)], synth: createBass(steps), keys: createBass(steps) };
@@ -59,6 +61,8 @@ function demoScene(drums, bass, synth, keys) {
 export function createProject() {
   return {
     version: 4,
+    id: newId(),
+    name: 'My jam',
     bpm: 126,
     swing: 54,
     volume: 88,
@@ -78,11 +82,11 @@ export function createProject() {
     keys: { sound: 'mk2-violins', knobs: { ...KEYS_KNOBS } },
     mixer: {
       bass1: { ...CHANNEL, level: 0.75, delay: 0.25, drive: 0.35 },
-      synth: { ...CHANNEL, level: 0.8, delay: 0.3, pan: 0.15 },
-      keys: { ...CHANNEL, level: 0.55, delay: 0.15, pan: -0.1 },
-      drums: { ...CHANNEL, level: 0.85 },
+      synth: { ...CHANNEL, level: 0.8, delay: 0.3, reverb: 0.25, pan: 0.15 },
+      keys: { ...CHANNEL, level: 0.55, delay: 0.15, reverb: 0.35, pan: -0.1 },
+      drums: { ...CHANNEL, level: 0.85, reverb: 0.08 },
     },
-    fx: { delayDivision: '3/16', feedback: 0.4, comp: 0.4 },
+    fx: { delayDivision: '3/16', feedback: 0.4, comp: 0.4, reverb: 0.8 },
   };
 }
 
@@ -96,6 +100,8 @@ const num = (v, min, max, fallback) => (typeof v === 'number' && Number.isFinite
 export function normalizeProject(raw) {
   const p = createProject();
   if (!raw || typeof raw !== 'object') return p;
+  if (typeof raw.id === 'string' && /^[a-z0-9]{1,16}$/.test(raw.id)) p.id = raw.id;
+  if (typeof raw.name === 'string' && raw.name.trim()) p.name = raw.name.trim().slice(0, NAME_MAX);
   p.bpm = parseInRange(raw.bpm, BPM.min, BPM.max, p.bpm);
   p.swing = parseInRange(raw.swing, SWING.min, SWING.max, p.swing);
   p.volume = parseInRange(raw.volume, 0, 100, p.volume);
@@ -151,13 +157,14 @@ export function normalizeProject(raw) {
     const c = raw.mixer?.[ch] ?? {};
     const d = p.mixer[ch];
     p.mixer[ch] = {
-      level: num(c.level, 0, 1, d.level), pan: num(c.pan, -1, 1, d.pan), delay: num(c.delay, 0, 1, d.delay),
+      level: num(c.level, 0, 1, d.level), pan: num(c.pan, -1, 1, d.pan), delay: num(c.delay, 0, 1, d.delay), reverb: num(c.reverb, 0, 1, d.reverb),
       drive: num(c.drive, 0, 1, d.drive), mute: c.mute === true, solo: c.solo === true,
     };
   }
   if (raw.fx?.delayDivision in DELAY_DIVISIONS) p.fx.delayDivision = raw.fx.delayDivision;
   p.fx.feedback = num(raw.fx?.feedback, 0, 0.9, p.fx.feedback);
   p.fx.comp = num(raw.fx?.comp, 0, 1, p.fx.comp);
+  p.fx.reverb = num(raw.fx?.reverb, 0, 1, p.fx.reverb);
   return p;
 }
 

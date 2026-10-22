@@ -1,15 +1,43 @@
-import { SCENES, MAX_SONG_LENGTH, createScene, copyScene, resizeScene } from '../project.js';
+import { SCENES, CHANNELS, MAX_SONG_LENGTH, NAME_MAX, createScene, copyScene, resizeScene } from '../project.js';
 import { STEP_OPTIONS } from '../pattern.js';
 import { NOTE_NAMES } from '../bass.js';
 import { SCALE_NAMES, transposeLine } from '../generate.js';
 
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
 const rootName = (n) => NOTE_NAMES[((n % 12) + 12) % 12];
+const STEM_NAMES = { bass1: 'bass', synth: 'synth', keys: 'keys', drums: 'drums' };
+const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'jam';
+
+// Hand files to the phone's share sheet (save to Files, send to a DAW), or download them.
+async function shareFiles(files) {
+  if (navigator.canShare?.({ files })) return navigator.share({ files, title: files[0].name }).catch(() => {});
+  for (const file of files) {
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: file.name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    await new Promise((r) => setTimeout(r, 300)); // browsers drop downloads fired in the same instant
+  }
+}
 
 export function createSongView(root, app) {
   root.classList.add('console', 'song');
   root.innerHTML = `
     <header class="plate-head"><h2 class="logo">Song</h2></header>
+    <section class="panel project">
+      <h3>Project</h3>
+      <div class="row">
+        <label class="field grow">Name <input type="text" data-name maxlength="${NAME_MAX}" autocomplete="off" enterkeyhint="done"></label>
+        <label class="field grow">Open <select data-open aria-label="Open a project"></select></label>
+      </div>
+      <div class="row project-tools">
+        <button type="button" data-project="create">New</button>
+        <button type="button" data-project="duplicate">Duplicate</button>
+        <button type="button" data-project="remove">Delete</button>
+        <button type="button" data-project="save-file">Save file</button>
+        <button type="button" data-project="open-file">Open file</button>
+        <input type="file" accept=".json,application/json" data-file hidden>
+      </div>
+    </section>
     <section class="panel">
       <h3>Key</h3>
       <p class="hint">Random, Mutate and the example lines follow the key. Changing the root moves every line with it.</p>
@@ -54,7 +82,8 @@ export function createSongView(root, app) {
     </section>
     <section class="panel">
       <h3>Export</h3>
-      <p class="hint">Renders a WAV file of the mix, with the delay tail.</p>
+      <p class="hint">Renders a WAV file of the mix, with the delay and reverb tail.</p>
+      <label class="switch"><input type="checkbox" data-stems><span>As stems: one file per machine</span></label>
       <div class="row">
         <button type="button" class="primary" data-export="loop">4 bars of this scene</button>
         <button type="button" class="primary" data-export="song">The song</button>
@@ -67,7 +96,7 @@ export function createSongView(root, app) {
       Keys: Mellotron tapes from the <a href="https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z">Mellotron Archive</a>,
       electric pianos by Greg Sullivan (<a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>) and the TX81Z from
       <a href="https://github.com/sgossner/VCSL">VCSL</a> (CC0), via smpldsnds.
-      Played with <a href="https://github.com/danigb/smplr">smplr</a>. Type: Archivo (OFL).</p>
+      Played with <a href="https://github.com/danigb/smplr">smplr</a>. Type: Archivo and DSEG7 by keshikan (OFL).</p>
       <p>By Gustavo Astudillo. <a href="https://github.com/taviztud/drum_seq">Source code on GitHub</a>.</p>
     </footer>`;
 
@@ -103,6 +132,12 @@ export function createSongView(root, app) {
       for (const b of root.querySelectorAll('[data-bar-scene]')) b.ariaPressed = String(Number(b.dataset.barScene) === scene);
       barEdit.querySelector('output').textContent = `${signed(tr)} · ${rootName(p.key.root + tr)}`;
     }
+    const nameInput = root.querySelector('[data-name]');
+    if (document.activeElement !== nameInput) nameInput.value = p.name;
+    const open = root.querySelector('[data-open]');
+    const list = app.library.list();
+    if (!list.some((e) => e.id === p.id)) list.unshift({ id: p.id, name: p.name });
+    open.replaceChildren(...list.map((e) => new Option(e.id === p.id ? p.name : e.name, e.id, false, e.id === p.id)));
     root.querySelector('[data-root]').value = p.key.root;
     root.querySelector('[data-scale]').value = p.key.scale;
     root.querySelector('.scene-name').textContent = SCENES[app.sceneIndex()];
@@ -153,6 +188,37 @@ export function createSongView(root, app) {
     app.changed('song');
     render();
   });
+  root.querySelector('[data-name]').addEventListener('change', (e) => {
+    app.project.name = e.target.value.trim().slice(0, NAME_MAX) || 'My jam';
+    app.changed('song');
+  });
+  root.querySelector('[data-open]').addEventListener('change', (e) => { if (e.target.value !== app.project.id) app.library.open(e.target.value); });
+  let armedDelete = null; // Delete asks for a second tap within 3 s
+  root.querySelector('.project-tools').addEventListener('click', async (e) => {
+    const action = e.target.closest('[data-project]')?.dataset.project;
+    if (action === 'remove') {
+      if (!armedDelete) {
+        e.target.textContent = 'Tap again';
+        armedDelete = setTimeout(() => { armedDelete = null; e.target.textContent = 'Delete'; }, 3000);
+        return;
+      }
+      clearTimeout(armedDelete);
+      armedDelete = null;
+      e.target.textContent = 'Delete';
+      const name = app.project.name;
+      app.library.remove();
+      app.toast(`Deleted ${name}`);
+    } else if (action === 'save-file') {
+      await shareFiles([new File([JSON.stringify(app.project, null, 1)], `${slug(app.project.name)}.drumseq.json`, { type: 'application/json' })]);
+    } else if (action === 'open-file') root.querySelector('[data-file]').click();
+    else if (action) app.library[action]();
+  });
+  root.querySelector('[data-file]').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file && file.size > 2e6) app.toast("That file is too big to be a drum_seq project.");
+    else if (file) app.library.load(await file.text());
+  });
   root.querySelector('[data-scale]').addEventListener('change', (e) => { app.project.key.scale = e.target.value; app.changed('song'); });
   // A new root moves every line by the shortest way (at most a tritone), so the music changes key.
   root.querySelector('[data-root]').addEventListener('change', (e) => {
@@ -200,17 +266,18 @@ export function createSongView(root, app) {
     const buttons = root.querySelectorAll('[data-export]');
     buttons.forEach((b) => (b.disabled = true));
     try {
-      const wav = await app.rack.exportWav(kind === 'song' ? { song: true } : { bars: 4 }, (msg) => (exportStatus.textContent = msg));
-      const name = `drum_seq-${kind}-${app.project.bpm}bpm.wav`;
-      const file = new File([wav], name, { type: 'audio/wav' });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: name }).catch(() => {});
-      } else {
-        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: name });
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      const range = kind === 'song' ? { song: true } : { bars: 4 };
+      const base = `${slug(app.project.name)}-${kind}-${app.project.bpm}bpm`;
+      const parts = root.querySelector('[data-stems]').checked ? CHANNELS : [null];
+      const files = [];
+      for (const [n, only] of parts.entries()) {
+        const label = only ? ` ${STEM_NAMES[only]} (${n + 1}/${parts.length})` : '';
+        const wav = await app.rack.exportWav({ ...range, only }, (msg) => (exportStatus.textContent = `${msg}${label}`));
+        files.push(new File([wav], `${base}${only ? `-${STEM_NAMES[only]}` : ''}.wav`, { type: 'audio/wav' }));
       }
-      exportStatus.textContent = `Exported ${name} (${(wav.size / 1e6).toFixed(1)} MB).`;
+      await shareFiles(files);
+      const mb = files.reduce((sum, f) => sum + f.size, 0) / 1e6;
+      exportStatus.textContent = `Exported ${files.length > 1 ? `${files.length} stems` : files[0].name} (${mb.toFixed(1)} MB).`;
     } catch (error) {
       console.error(error);
       exportStatus.textContent = `Export failed: ${error.message}`;

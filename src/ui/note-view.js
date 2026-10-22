@@ -186,6 +186,15 @@ export function createNoteView(root, app, config) {
   keys.addEventListener('click', (e) => {
     const key = e.target.closest('.key');
     if (!key) return;
+    const rec = app.recordStep();
+    if (rec !== null) { // live recording: the note lands on the step being heard, with the chosen octave
+      const line = config.line();
+      Object.assign(line[rec], { on: true, note: Number(key.dataset.note), oct: line[selected].oct });
+      app.changed('pattern');
+      audition(line[rec]);
+      render();
+      return;
+    }
     edit((s) => { s.on = true; s.note = Number(key.dataset.note); });
     audition(config.line()[selected]);
     app.haptic();

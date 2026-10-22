@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { noteStep, createBass, keyOf, parseBass, presetBass, normalizeBass, resizeBass, BASS_PRESET_NAMES, MELODY_PRESET_NAMES, GATE } from '../src/bass.js';
 import { createProject, normalizeProject, migrateV1, resizeScene, SCENES } from '../src/project.js';
-import { advance, startCursor, stepEvents, planRender, NOTE_TRACKS } from '../src/plan.js';
+import { advance, startCursor, stepEvents, planRender, recordStep, NOTE_TRACKS } from '../src/plan.js';
+import { reverbImpulse } from '../src/rack.js';
 
 const line = (text) => parseBass(text);
 
@@ -55,7 +56,30 @@ test('project survives junk from storage and keeps good values', () => {
   assert.equal(p.mixer.bass1.pan, -1);
   assert.equal(p.fx.delayDivision, '3/16');
   assert.equal(p.fx.feedback, 0.9);
-  assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(createProject()))), createProject());
+  const fresh = createProject();
+  assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(fresh))), fresh, 'a saved project loads unchanged');
+  assert.equal(p.mixer.keys.reverb, 0.35, 'saves from before the reverb get its defaults');
+  assert.equal(p.fx.reverb, 0.8);
+  const named = normalizeProject({ id: 'abc123', name: `  ${'x'.repeat(60)} ` });
+  assert.equal(named.id, 'abc123');
+  assert.equal(named.name.length, 40);
+  assert.notEqual(normalizeProject({ id: '<script>' }).id, '<script>', 'ids from files are checked');
+});
+
+test('live recording rounds a tap to the nearest step', () => {
+  const at = { pos: 3, time: 10 };
+  assert.equal(recordStep(at, 10.05, 0.125, 16), 3, 'early in the step: this step');
+  assert.equal(recordStep(at, 10.1, 0.125, 16), 4, 'past the middle: the next step');
+  assert.equal(recordStep({ pos: 15, time: 0 }, 0.1, 0.125, 16), 0, 'wraps to the start of the bar');
+});
+
+test('the reverb impulse is repeatable and dies away', () => {
+  const [a] = reverbImpulse(8000);
+  const [b] = reverbImpulse(8000);
+  assert.deepEqual(a, b);
+  const peak = (x) => x.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  assert.ok(peak(a.slice(0, 800)) > 100 * peak(a.slice(-800)));
+  assert.equal(a[0], 0, 'pre-delay');
 });
 
 test('drum patterns from drum_seq v1 come along', () => {

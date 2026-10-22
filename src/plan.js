@@ -91,3 +91,6 @@ export function planRender(project, { song = false, bars = 4 } = {}) {
   for (const [id, key] of Object.entries(cursor.held)) if (key !== null) notes[id].push({ kind: 'off', key, time: totalSteps * stepSec });
   return { drums, notes, duration: totalSteps * stepSec };
 }
+
+// Live recording: the step a tap at `now` belongs to. Past the middle of the playing step it goes to the next.
+export const recordStep = ({ pos, time }, now, stepSec, steps) => (pos + (now - time > stepSec / 2 ? 1 : 0)) % steps;

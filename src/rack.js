@@ -1,5 +1,5 @@
-// Audio for the whole rack: two Open303 bass lines, the analog synth, the sampled keys and drum machine,
-// mixer, delay and master bus. Live playback and the offline WAV export build the same graph and play the same plan.
+// Audio for the whole rack: the Open303 bass line, the analog synth, the sampled keys and drum machine,
+// mixer, delay, reverb and master bus. Live playback and the offline WAV export build the same graph and play the same plan.
 import {
   DrumMachine, DrumAbuse, Mellotron, ElectricPiano, Sequencer, Scheduler, CacheStorage as SampleCache, audioBufferToWav16,
 } from '../vendor/smplr-1.1.0.mjs';
@@ -10,7 +10,7 @@ import { findKit, findKeySound } from './kits.js';
 const WORKLETS = ['open303-processor.js', 'va-processor.js'].map((f) => new URL(`./worklets/${f}`, import.meta.url));
 const NODE_TRACKS = ['bass1', 'synth']; // machines played by an AudioWorklet voice
 const RELEASE = 0.015; // drum choke/retrigger release in seconds, near-instant like the hardware
-const TAIL = 2; // seconds of delay tail kept at the end of an export
+const TAIL = 3; // seconds of delay and reverb tail kept at the end of an export
 // Juno-60/106 chorus modes: LFO rate (Hz) and delay sweep (s). Index 0 is off.
 const CHORUS = [null, { rate: 0.5, depth: 0.0018 }, { rate: 0.83, depth: 0.0026 }];
 
@@ -26,6 +26,27 @@ function driveCurve(amount) {
     curve[i] = Math.tanh(k * x) / Math.tanh(k);
   }
   return curve;
+}
+
+/**
+ * Plate-style reverb impulse: stereo noise with a 20 ms pre-delay, decaying 60 dB over `seconds`
+ * and getting darker as it fades. Seeded, so live playback and the export sound the same.
+ */
+export function reverbImpulse(sampleRate, seconds = 2.4, seed = 1) {
+  let x = seed;
+  const rnd = () => ((x = (x * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const pre = Math.round(0.02 * sampleRate);
+  const n = Math.round(seconds * sampleRate);
+  return [0, 1].map(() => {
+    const data = new Float32Array(n);
+    let low = 0;
+    for (let i = pre; i < n; i++) {
+      const t = (i - pre) / (n - pre);
+      low += (rnd() - low) * (0.65 - 0.55 * t); // one-pole low-pass closing over time
+      data[i] = low * Math.exp(-6.9 * t);
+    }
+    return data;
+  });
 }
 
 async function addWorklets(ctx) {
@@ -53,6 +74,14 @@ function buildGraph(ctx, project, noteEvents = {}) {
   delayIn.connect(delay).connect(highcut).connect(lowcut).connect(feedback).connect(delay);
   lowcut.connect(bus);
 
+  const reverbIn = new GainNode(ctx);
+  const reverb = new ConvolverNode(ctx);
+  const reverbOut = new GainNode(ctx);
+  const impulse = reverbImpulse(ctx.sampleRate);
+  reverb.buffer = ctx.createBuffer(2, impulse[0].length, ctx.sampleRate);
+  impulse.forEach((data, ch) => reverb.buffer.copyToChannel(data, ch));
+  reverbIn.connect(reverb).connect(reverbOut).connect(bus);
+
   const channels = {};
   for (const id of CHANNELS) {
     const input = new GainNode(ctx);
@@ -60,12 +89,14 @@ function buildGraph(ctx, project, noteEvents = {}) {
     const fader = new GainNode(ctx);
     const pan = new StereoPannerNode(ctx);
     const send = new GainNode(ctx);
+    const verb = new GainNode(ctx);
     const meter = new AnalyserNode(ctx, { fftSize: 512 });
     (drive ? input.connect(drive) : input).connect(fader).connect(pan);
     pan.connect(bus);
     pan.connect(send).connect(delayIn);
+    pan.connect(verb).connect(reverbIn);
     pan.connect(meter);
-    channels[id] = { input, drive, fader, pan, send, meter };
+    channels[id] = { input, drive, fader, pan, send, verb, meter };
   }
   channels.keys.input.gain.value = 2; // the tape and piano samples are recorded quiet
 
@@ -102,6 +133,7 @@ function buildGraph(ctx, project, noteEvents = {}) {
       smooth(channels[id].fader.gain, audible ? m.level ** 2 : 0); // squared: feels like an audio taper
       smooth(channels[id].pan.pan, m.pan);
       smooth(channels[id].send.gain, m.delay);
+      smooth(channels[id].verb.gain, m.reverb);
       if (channels[id].drive && lastDrive[id] !== m.drive) {
         channels[id].drive.curve = m.drive > 0 ? driveCurve(m.drive) : null;
         channels[id].input.gain.value = 1 / (1 + m.drive * 0.6); // keep loudness roughly even
@@ -122,6 +154,7 @@ function buildGraph(ctx, project, noteEvents = {}) {
     const stepSec = 60 / p.bpm / 4;
     smooth(delay.delayTime, Math.min(3, DELAY_DIVISIONS[p.fx.delayDivision] * stepSec));
     smooth(feedback.gain, p.fx.feedback);
+    smooth(reverbOut.gain, p.fx.reverb);
     comp.threshold.value = -p.fx.comp * 30;
     comp.ratio.value = 1 + p.fx.comp * 7;
     smooth(makeup.gain, 10 ** ((p.fx.comp * 9) / 20));
@@ -295,9 +328,15 @@ export async function createRack({ project, queued, onStep }) {
       return { ...Object.fromEntries(CHANNELS.map((id) => [id, level(graph.channels[id].meter)])), master: level(graph.masterMeter) };
     },
 
-    // Render offline (faster than real time) and return a 16-bit WAV.
-    async exportWav(options, onProgress) {
-      const p = project();
+    // Render offline (faster than real time) and return a 16-bit WAV. With `only`, render that
+    // channel alone (a stem, with its own delay and reverb) and no bus compression, so stems sum to the mix.
+    async exportWav({ only, ...options } = {}, onProgress) {
+      const base = project();
+      const p = only ? {
+        ...base,
+        fx: { ...base.fx, comp: 0 },
+        mixer: Object.fromEntries(CHANNELS.map((id) => [id, { ...base.mixer[id], mute: id !== only, solo: false }])),
+      } : base;
       const plan = planRender(p, options);
       if (plan.duration === 0) throw new Error('Nothing to export: the song is empty.');
       const sampleRate = 44100;

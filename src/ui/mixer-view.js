@@ -68,6 +68,7 @@ export function createMixerView(root, app) {
     const knobDefs = [
       { key: 'pan', label: 'Pan', min: -1, max: 1, format: panText, defaultValue: 0 },
       { key: 'delay', label: 'Delay', min: 0, max: 1, format: pct, defaultValue: 0 },
+      { key: 'reverb', label: 'Reverb', min: 0, max: 1, format: pct, defaultValue: 0 },
     ];
     if (id !== 'drums') knobDefs.push({ key: 'drive', label: 'Drive', min: 0, max: 1, format: pct, defaultValue: 0 });
     const knobs = knobDefs.map((d) => {
@@ -98,6 +99,7 @@ export function createMixerView(root, app) {
   const masterKnobs = [
     { label: 'Volume', min: 0, max: 100, step: 1, get: () => p().volume, set: (v) => { p().volume = v; }, format: (v) => (v === 0 ? 'Off' : `${((v / 100 - 1) * 48).toFixed(1)} dB`), defaultValue: 88 },
     { label: 'Comp', min: 0, max: 1, get: () => p().fx.comp, set: (v) => { p().fx.comp = v; }, format: pct, defaultValue: 0.4 },
+    { label: 'Reverb', min: 0, max: 1, get: () => p().fx.reverb, set: (v) => { p().fx.reverb = v; }, format: pct, defaultValue: 0.8 },
     { label: 'Feedback', min: 0, max: 0.9, get: () => p().fx.feedback, set: (v) => { p().fx.feedback = v; }, format: pct, defaultValue: 0.4 },
     { label: 'Swing', min: SWING.min, max: SWING.max, step: 1, get: () => p().swing, set: (v) => { p().swing = v; }, format: (v) => `${v}%`, defaultValue: SWING.default },
   ].map((d) => {

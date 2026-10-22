@@ -1,5 +1,6 @@
-import { createProject, normalizeProject, migrateV1, SCENES } from './project.js';
+import { createProject, normalizeProject, migrateV1, newId, SCENES } from './project.js';
 import { BPM, parseInRange } from './pattern.js';
+import { recordStep } from './plan.js';
 import { findKit, findKeySound } from './kits.js';
 import { createRack } from './rack.js';
 import { createBassView, createSynthView, createKeysView } from './ui/note-view.js';
@@ -10,6 +11,8 @@ import { createSongView } from './ui/song-view.js';
 const STORAGE_KEY = 'drum_seq:v2';
 const LEGACY_KEY = 'drum_seq:v1';
 const TAB_KEY = 'drum_seq:tab';
+const LIBRARY_KEY = 'drum_seq:library'; // [{ id, name, updated }], newest first
+const PROJECT_KEY = 'drum_seq:project:'; // + id: each saved project
 const $ = (selector) => document.querySelector(selector);
 
 // ---------- Project (saved in this browser) ----------
@@ -29,9 +32,22 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 300);
 }
+const readLibrary = () => {
+  const list = readJson(LIBRARY_KEY);
+  return Array.isArray(list) ? list.filter((e) => typeof e?.id === 'string' && typeof e.name === 'string') : [];
+};
+// The working copy, plus its entry in the project library.
 function flush() {
   clearTimeout(saveTimer);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(app.project)); } catch { /* storage full or blocked */ }
+  const p = app.project;
+  try {
+    const json = JSON.stringify(p);
+    localStorage.setItem(STORAGE_KEY, json);
+    localStorage.setItem(PROJECT_KEY + p.id, json);
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify([{ id: p.id, name: p.name, updated: Date.now() }, ...readLibrary().filter((e) => e.id !== p.id)]));
+  } catch {
+    app.toast('Storage is full: save the project to a file to keep it safe.');
+  }
 }
 addEventListener('pagehide', flush);
 
@@ -47,6 +63,7 @@ const app = {
   scene: () => app.project.scenes[app.sceneIndex()],
   changed(kind) {
     save();
+    if (kind !== 'ui') record();
     if (kind === 'sound' || kind === 'mix') app.rack?.apply(app.project);
     if (kind === 'kit') loadSound('kit');
     if (kind === 'keys') loadSound('keys');
@@ -72,6 +89,116 @@ const views = {
   song: createSongView($('#view-song'), app),
 };
 const rebuildAll = () => { Object.values(views).forEach((v) => v.rebuild()); renderScenes(); };
+
+// ---------- Undo / redo ----------
+
+// Snapshots of the project. A burst of changes (a knob drag) is one step: the state before the
+// first change is kept, and the burst ends after half a second of quiet.
+const HISTORY_MAX = 100;
+const history = { undo: [], redo: [], snapshot: JSON.stringify(app.project), burst: null };
+const undoButton = $('#undo');
+const redoButton = $('#redo');
+function renderHistory() {
+  undoButton.disabled = !history.undo.length;
+  redoButton.disabled = !history.redo.length;
+}
+function record() {
+  if (history.burst === null) {
+    history.undo.push(history.snapshot);
+    if (history.undo.length > HISTORY_MAX) history.undo.shift();
+    history.redo = [];
+  }
+  clearTimeout(history.burst);
+  history.burst = setTimeout(settle, 500);
+  renderHistory();
+}
+function settle() {
+  clearTimeout(history.burst);
+  history.burst = null;
+  history.snapshot = JSON.stringify(app.project);
+}
+function travel(from, to) {
+  settle();
+  if (!from.length) return;
+  to.push(history.snapshot);
+  setProject(normalizeProject(JSON.parse(from.pop())), { keepHistory: true });
+}
+undoButton.addEventListener('click', () => travel(history.undo, history.redo));
+redoButton.addEventListener('click', () => travel(history.redo, history.undo));
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || e.target.closest('input, textarea')) return;
+  e.preventDefault();
+  if (e.shiftKey) travel(history.redo, history.undo);
+  else travel(history.undo, history.redo);
+});
+
+// Swap in another project (undo, open, new, import): every view, the sound and the saved copy follow.
+function setProject(project, { keepHistory = false } = {}) {
+  const before = app.project;
+  if (!keepHistory && app.rack?.playing) togglePlay();
+  app.project = project;
+  history.snapshot = JSON.stringify(project);
+  if (!keepHistory) { history.undo = []; history.redo = []; }
+  renderHistory();
+  app.rack?.apply(project);
+  if (project.drums.kit !== before.drums.kit) loadSound('kit');
+  if (project.keys.sound !== before.keys.sound) loadSound('keys');
+  showBpm();
+  rebuildAll();
+  flush();
+}
+
+// ---------- Projects ----------
+
+app.library = {
+  list: () => readLibrary(),
+  open(id) {
+    flush();
+    const raw = readJson(PROJECT_KEY + id);
+    if (!raw) return app.toast("That project couldn't be read.");
+    setProject(normalizeProject(raw));
+  },
+  create() {
+    flush();
+    setProject({ ...createProject(), name: `Jam ${readLibrary().length + 1}` });
+  },
+  duplicate() {
+    flush();
+    setProject({ ...structuredClone(app.project), id: newId(), name: `${app.project.name} copy`.slice(0, 40) });
+  },
+  remove() {
+    const id = app.project.id;
+    try { localStorage.removeItem(PROJECT_KEY + id); } catch { /* ignore */ }
+    const rest = readLibrary().filter((e) => e.id !== id);
+    try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(rest)); } catch { /* ignore */ }
+    const next = rest.length && readJson(PROJECT_KEY + rest[0].id);
+    setProject(next ? normalizeProject(next) : createProject());
+  },
+  // A file from anywhere: normalizeProject validates every field. It always becomes a new project.
+  load(text) {
+    let raw;
+    try { raw = JSON.parse(text); } catch { return app.toast("That file isn't a drum_seq project."); }
+    flush();
+    setProject({ ...normalizeProject(raw), id: newId() });
+    app.toast(`Opened ${app.project.name}`);
+  },
+};
+
+// ---------- Live recording ----------
+
+// While Rec is on and the rack plays, taps write into the step being heard (rounded to the nearest 16th).
+const recButton = $('#rec');
+let playPos = null; // { pos, time } of the step heard last
+app.recording = false;
+app.recordStep = () => {
+  if (!app.recording || !app.rack?.playing || !playPos) return null;
+  return recordStep(playPos, app.rack.now(), 60 / app.project.bpm / 4, app.scene().steps);
+};
+recButton.addEventListener('click', () => {
+  app.recording = !app.recording;
+  recButton.ariaPressed = String(app.recording);
+  if (app.recording && !app.rack?.playing) app.toast('Press play: what you tap goes into the step that is playing');
+});
 
 // ---------- Tabs ----------
 
@@ -190,6 +317,7 @@ async function togglePlay() {
     playingScene = -1;
     queuedScene = null;
     drawQueue.length = 0;
+    playPos = null;
     Object.values(views).forEach((v) => v.playhead?.(-1));
     views.song.position(-1);
     wakeLock?.release().catch(() => {});
@@ -234,6 +362,7 @@ function draw() {
       Object.values(views).forEach((v) => (resized ? v.rebuild() : v.render()));
       renderScenes();
     }
+    playPos = last;
     for (const id of ['bass1', 'synth', 'keys', 'drums']) views[id].playhead(last.pos);
     views.song.position(last.songIndex);
   }

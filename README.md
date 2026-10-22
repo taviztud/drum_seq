@@ -29,8 +29,8 @@ Es la idea de ReBirth, en el navegador.
   - Se edita como en las TR: eliges un sonido y sus 16 pasos se encienden y apagan. Una vista general
     muestra todas las pistas.
   - Por sonido: Level, Tune, Decay, Tone, Mute y Solo. El hi-hat cerrado corta al abierto.
-- **Mixer**: por máquina, fader, medidor LED, Pan, envío al Delay, Drive (en el bajo), Mute y Solo.
-  En el máster: volumen, compresor, delay sincronizado al tempo (de 1/16 a 1/4 con puntillo) con feedback, swing estilo
+- **Mixer**: por máquina, fader, medidor LED, Pan, envíos a Delay y Reverb, Drive (en el bajo), Mute y Solo.
+  En el máster: volumen, compresor, reverb, delay sincronizado al tempo (de 1/16 a 1/4 con puntillo) con feedback, swing estilo
   MPC y un limitador de seguridad.
 - **Song**: 4 escenas (A–D), cada una con su batería, su línea de bajo, su línea de synth y la de keys, de 8 a 32 pasos.
   - Encadenas escenas en una canción y la reproduces en modo canción.
@@ -51,6 +51,16 @@ Es la idea de ReBirth, en el navegador.
 - **Transposición por compás:** en Song, cada compás puede llevar su transposición (−12 a +12), como el Track Mode
   del TB-303. Así, con una sola escena, sale una progresión completa. La batería no se transpone.
 
+## Para componer
+
+- **Deshacer y rehacer** (↶ ↷ o Ctrl/⌘+Z): cada cambio queda en el historial; un giro de perilla cuenta como uno.
+- **Proyectos** (en Song): varios proyectos con nombre, nuevo, duplicar y borrar. **Guardar archivo** y **Abrir archivo**
+  (`.drumseq.json`) para respaldarlos o pasarlos a otro equipo.
+- **Grabar en vivo** (Rec): con la reproducción en marcha, lo que tocas en el teclado o en los sonidos de batería
+  queda en el paso que suena, cuantizado a semicorcheas.
+- **Exportar por pistas**: con "As stems", cada máquina sale en su propio WAV (con su delay y reverb, sin el compresor
+  general) para terminar el tema en un DAW.
+
 ## Pensado para el móvil
 
 - Una máquina por pantalla y la barra de máquinas abajo, al alcance del pulgar.
@@ -61,6 +71,8 @@ Es la idea de ReBirth, en el navegador.
   silencio esté activado.
 - **Como app:** se instala en la pantalla de inicio y funciona sin conexión, porque los samples quedan en caché
   tras la primera carga.
+- **Aspecto de equipo real:** chasis de acero gastado con tornillos, aluminio cepillado en el bajo, madera de nogal en el
+  Synth y el Keys, display LED de 7 segmentos. Todas las texturas se dibujan con filtros SVG, sin descargar imágenes.
 - **Accesible:** todo se maneja con teclado y lector de pantalla. La barra espaciadora inicia y detiene.
 
 ## Uso
@@ -92,7 +104,7 @@ La primera vez que eliges cada caja de ritmos o sonido de Keys, sus samples se d
 | `src/worklets/open303-processor.js` | El motor del 303 (port de Open303) |
 | `src/worklets/va-processor.js` | El motor del Synth (analógico virtual) |
 | `src/ui/` | Pantallas y la perilla |
-| `vendor/` | [smplr](https://github.com/danigb/smplr) 1.1.0 (MIT) y la tipografía Archivo (OFL) |
+| `vendor/` | [smplr](https://github.com/danigb/smplr) 1.1.0 (MIT) y las tipografías Archivo y DSEG7 (OFL) |
 | `test/` | Tests (`npm test`, runner integrado de Node 18+) |
 
 ## Créditos
@@ -105,6 +117,6 @@ La primera vez que eliges cada caja de ritmos o sonido de Keys, sus samples se d
   ([CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)) y el TX81Z de [VCSL](https://github.com/sgossner/VCSL)
   (CC0), preparados por [smpldsnds](https://github.com/smpldsnds).
 - Todo se reproduce con [smplr](https://github.com/danigb/smplr).
-- Tipografía: [Archivo](https://github.com/Omnibus-Type/Archivo) (SIL Open Font License).
+- Tipografías: [Archivo](https://github.com/Omnibus-Type/Archivo) y [DSEG](https://github.com/keshikan/DSEG) de keshikan (SIL Open Font License).
 
 Desarrollado por Gustavo Astudillo.

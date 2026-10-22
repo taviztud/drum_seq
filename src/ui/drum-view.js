@@ -132,6 +132,8 @@ export function createDrumView(root, app) {
     if (!chip) return;
     app.project.drums.selected = chip.dataset.voice;
     app.changed('ui');
+    const rec = app.recordStep();
+    if (rec !== null) { app.scene().drums[chip.dataset.voice][rec] = true; app.changed('pattern'); } // live recording
     if (chip.dataset.voice !== 'ac') app.rack?.auditionDrum(chip.dataset.voice, app.project.drums.voices[chip.dataset.voice]);
     render();
   });

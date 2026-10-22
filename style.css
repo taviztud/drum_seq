@@ -23,6 +23,27 @@
   --focus: var(--paper);
   --select: var(--signal);
   color-scheme: dark;
+  /* Material textures, drawn by the browser from tiny SVG noise filters (no image downloads). */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+  --grime: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.011' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .16 0 0 0 0 .1 0 0 0 0 .05 2.4 0 0 0 -1.3'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23g)' opacity='.4'/%3E%3C/svg%3E");
+  --brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.002 .85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23b)' opacity='.5'/%3E%3C/svg%3E");
+  --wood: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='400' preserveAspectRatio='none'%3E%3Cfilter id='w' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35 .008' numOctaves='3' seed='3'/%3E%3CfeColorMatrix values='.34 0 0 0 .2 .2 0 0 0 .11 .08 0 0 0 .05 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23w)'/%3E%3C/svg%3E");
+  /* Four slotted screw heads in the corners of a panel: each is a slot over a domed head. */
+  --screw-head: radial-gradient(circle closest-side, #d6cfbf, #8b8478 55%, #3d3833 92%, transparent 100%);
+  --screw-slot: linear-gradient(135deg, transparent 42%, rgb(30 26 22 / 0.85) 42% 58%, transparent 58%);
+  --screws:
+    var(--screw-slot) left 10px top 10px / 8px 8px no-repeat, var(--screw-head) left 8px top 8px / 12px 12px no-repeat,
+    var(--screw-slot) right 10px top 10px / 8px 8px no-repeat, var(--screw-head) right 8px top 8px / 12px 12px no-repeat,
+    var(--screw-slot) left 10px bottom 10px / 8px 8px no-repeat, var(--screw-head) left 8px bottom 8px / 12px 12px no-repeat,
+    var(--screw-slot) right 10px bottom 10px / 8px 8px no-repeat, var(--screw-head) right 8px bottom 8px / 12px 12px no-repeat;
+}
+
+@font-face {
+  font-family: 'DSEG7';
+  src: url('vendor/fonts/dseg7-classic-bolditalic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
 }
 
 @font-face {
@@ -48,8 +69,8 @@
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: radial-gradient(120% 80% at 50% 0%, var(--desk-2), var(--desk) 70%);
-  background-color: var(--desk);
+  background: var(--grime), radial-gradient(120% 80% at 50% 0%, #2e2620, #15110e 75%);
+  background-color: #15110e;
   color: var(--paper);
   font: 500 15px/1.35 var(--font);
   overscroll-behavior: none;
@@ -64,25 +85,39 @@ button {
   padding: 8px 14px;
   border: 1px solid rgb(0 0 0 / 0.35);
   border-radius: 8px;
-  background: var(--rubber);
+  background: var(--grain), linear-gradient(#363431, #252321);
+  background-blend-mode: overlay, normal;
   color: var(--paper);
   font-weight: 650;
   font-stretch: 87%;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.4);
+  /* a hardware keycap: lit top edge, shadowed lip, sitting proud of the panel */
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 -3px 0 rgb(0 0 0 / 0.32), 0 2px 3px rgb(0 0 0 / 0.55);
 }
-button:active { transform: translateY(1px); }
+button:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 1px rgb(0 0 0 / 0.5); }
 button:disabled { opacity: 0.45; cursor: default; }
-button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
+button[aria-pressed="true"] { background: var(--grain), linear-gradient(#f4ecd6, #dccfae); background-blend-mode: overlay, normal; color: var(--ink); }
 select {
   min-height: 44px;
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid rgb(0 0 0 / 0.35);
-  background: var(--rubber);
+  background: var(--grain), linear-gradient(#2e2c29, #201f1d);
+  background-blend-mode: overlay, normal;
   color: var(--paper);
   font-weight: 600;
   font-stretch: 87%;
+}
+input[type="text"] {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid rgb(0 0 0 / 0.5);
+  border-radius: 8px;
+  background: #13120f;
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.7);
+  color: var(--paper);
+  font-weight: 600;
+  min-width: 0;
 }
 a { color: inherit; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
@@ -96,6 +131,10 @@ a { color: inherit; }
   margin: 0 auto;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* the instrument's case: aged black steel with rusty, worn edges */
+  background: var(--grime), var(--grain), linear-gradient(#24211e, #1a1816);
+  background-blend-mode: normal, overlay, normal;
+  box-shadow: inset 4px 0 0 #3a2617, inset -4px 0 0 #3a2617, inset 6px 0 0 #120e0b, inset -6px 0 0 #120e0b;
 }
 
 .transport {
@@ -104,8 +143,12 @@ a { color: inherit; }
   align-items: center;
   gap: 8px 10px;
   padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
-  background: linear-gradient(var(--desk-2), var(--desk));
-  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  position: relative;
+  padding-inline: max(22px, env(safe-area-inset-left)) max(22px, env(safe-area-inset-right));
+  background: var(--screws), var(--grime), var(--grain), linear-gradient(#2b2825, #1f1d1b);
+  background-blend-mode: normal, normal, normal, normal, normal, normal, normal, normal, normal, overlay, normal;
+  border-bottom: 1px solid #0c0a09;
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.05), 0 2px 6px rgb(0 0 0 / 0.5);
 }
 
 .play {
@@ -132,27 +175,36 @@ a { color: inherit; }
   min-width: 92px;
   padding: 6px 10px;
   border-radius: 6px;
-  background: #120b09;
-  box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.05);
+  background: radial-gradient(120% 90% at 50% 0%, #2a0d08, #0e0605 70%);
+  box-shadow: inset 0 2px 8px rgb(0 0 0 / 0.9), 0 0 0 2px #0b0908, 0 1px 0 2px rgb(255 255 255 / 0.06);
   color: var(--led);
   cursor: ns-resize;
   touch-action: none;
 }
 .lcd-digits {
-  font-size: 1.65rem;
+  position: relative;
+  font-family: 'DSEG7', var(--font);
+  font-size: 1.5rem;
+  font-style: italic;
   font-weight: 700;
-  font-stretch: 112%;
-  font-variant-numeric: tabular-nums;
   line-height: 1;
-  text-shadow: 0 0 8px rgb(255 45 22 / 0.6);
+  text-shadow: 0 0 6px rgb(255 45 22 / 0.75), 0 0 14px rgb(255 45 22 / 0.35);
   min-width: 3ch;
   text-align: right;
 }
+/* the unlit segments of a real LED display show faintly behind the digits */
+.lcd-digits::before { content: "888"; position: absolute; right: 0; color: rgb(255 45 22 / 0.1); text-shadow: none; }
 .lcd-unit { font-size: 0.7rem; font-weight: 600; color: #d0563f; }
 
 .scenes { display: flex; gap: 6px; margin-left: auto; }
 .scenes button { width: 44px; padding: 0; font-weight: 800; font-stretch: 112%; }
 .scenes button.queued { animation: blink 0.5s steps(2) infinite; border-color: var(--signal); }
+.edit-tools { display: flex; gap: 6px; }
+.edit-tools button { width: 44px; padding: 0; font-size: 1.25rem; }
+.edit-tools .rec { width: auto; display: inline-flex; align-items: center; gap: 6px; padding-inline: 10px; font-size: 0.85rem; }
+.rec-led { width: 8px; height: 8px; border-radius: 50%; background: var(--led); opacity: 0.25; }
+.rec[aria-pressed="true"] { background: var(--grain), linear-gradient(#3a1a14, #26110d); background-blend-mode: overlay, normal; color: #ffb3a6; }
+.rec[aria-pressed="true"] .rec-led { opacity: 1; box-shadow: 0 0 8px var(--led); }
 .scenes.song-mode button[aria-pressed="true"] { background: var(--signal); color: var(--ink); }
 @keyframes blink { 50% { background: var(--signal); color: var(--ink); } }
 
@@ -166,8 +218,12 @@ a { color: inherit; }
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
-  background: #141210;
-  border-top: 1px solid rgb(255 255 255 / 0.07);
+  position: relative;
+  padding-inline: max(22px, env(safe-area-inset-left)) max(22px, env(safe-area-inset-right));
+  background: var(--screws), var(--grime), var(--grain), linear-gradient(#1f1d1b, #151312);
+  background-blend-mode: normal, normal, normal, normal, normal, normal, normal, normal, normal, overlay, normal;
+  border-top: 1px solid #0c0a09;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
 .tabs button {
   position: relative;
@@ -223,7 +279,8 @@ a { color: inherit; }
 
 /* ---------- Faceplates ---------- */
 
-.view { display: grid; gap: 14px; border-radius: 16px; padding: 16px 14px 18px; }
+.view { position: relative; display: grid; gap: 14px; border-radius: 10px; padding: 20px 16px 22px; }
+.view::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--screws); pointer-events: none; }
 .view > * { min-width: 0; }
 .plate-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
 .logo {
@@ -255,17 +312,19 @@ a { color: inherit; }
   --focus: var(--ink);
   --select: var(--ink);
   color: var(--ink);
-  background:
-    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.07) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, var(--alu-hi), var(--alu) 60%, #bfc0bb);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 18px rgb(0 0 0 / 0.45);
+  /* TB-303: brushed aluminium, scuffed and a little grimy after years of use */
+  background: var(--grime), var(--brushed), linear-gradient(180deg, var(--alu-hi), var(--alu) 60%, #b7b8b2);
+  background-blend-mode: multiply, overlay, normal;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 0 0 1px rgb(0 0 0 / 0.25), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .synth {
-  /* Minimoog: black panel between walnut end cheeks */
-  border-inline: 10px solid #5a3a22;
-  border-image: linear-gradient(90deg, #4a2f1b, #7a5032 45%, #5a3a22) 1;
-  background: linear-gradient(180deg, #2a2a2c, #1a1a1c);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.5);
+  /* Minimoog: worn black panel between walnut end cheeks */
+  border-inline: 12px solid transparent;
+  background:
+    var(--wood) left / 12px 100% no-repeat border-box, var(--wood) right / 12px 100% no-repeat border-box,
+    var(--grime), var(--grain), linear-gradient(180deg, #262523, #181715);
+  background-blend-mode: normal, normal, normal, overlay, normal;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .synth .logo-num, .synth .logo { color: #f4efe2; }
 .keys-plate {
@@ -273,8 +332,13 @@ a { color: inherit; }
   --focus: var(--ink);
   --select: var(--ink);
   color: var(--ink);
-  background: linear-gradient(180deg, #efe6d2, #ddd2b8);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 6px 18px rgb(0 0 0 / 0.45);
+  /* Mellotron: yellowed ivory panel in a wooden case */
+  border-inline: 12px solid transparent;
+  background:
+    var(--wood) left / 12px 100% no-repeat border-box, var(--wood) right / 12px 100% no-repeat border-box,
+    var(--grime), var(--grain), linear-gradient(180deg, #ece2c8, #d6c9a8);
+  background-blend-mode: normal, normal, multiply, overlay, normal;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .keys-plate .kit-status { color: #5c5547; }
 .keys-plate .note-pads .pad:not(.on) { background: #c4bba6; color: #4e4a40; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.22); border-color: rgb(0 0 0 / 0.15); }
@@ -301,12 +365,16 @@ a { color: inherit; }
 .length-row output { min-width: 5.5em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 .length-row button { width: 48px; padding: 0; font-size: 1.2rem; }
 .rhythm {
-  background: linear-gradient(180deg, #34312d, #2a2724);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 6px 18px rgb(0 0 0 / 0.5);
+  /* TR-808/909: graphite panel */
+  background: var(--grime), var(--grain), linear-gradient(180deg, #353230, #282523);
+  background-blend-mode: normal, overlay, normal;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 .console {
-  background: var(--console);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 6px 18px rgb(0 0 0 / 0.45);
+  /* mixing desk: dark anodized steel */
+  background: var(--grime), var(--grain), linear-gradient(180deg, #282623, #1f1d1b);
+  background-blend-mode: normal, overlay, normal;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 6px 18px rgb(0 0 0 / 0.55);
 }
 
 /* ---------- Knobs ---------- */
@@ -328,7 +396,9 @@ a { color: inherit; }
   height: 56px;
   margin: 7px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #4a4a4f, #222225 55%, #151517);
+  background:
+    radial-gradient(circle at 38% 32%, #55555a, #232326 48%, #18181a 70%, transparent 71%),
+    repeating-conic-gradient(#121214 0 5deg, #2e2e32 5deg 10deg);
   box-shadow: 0 3px 6px rgb(0 0 0 / 0.5), inset 0 -2px 3px rgb(0 0 0 / 0.5);
 }
 /* Scale ticks around the knob, from 7 to 5 o'clock */
@@ -406,9 +476,11 @@ a { color: inherit; }
   align-items: flex-end;
   justify-content: center;
   padding-bottom: 8px;
-  background: linear-gradient(#f7f3ea, #e7e1d4);
+  background: var(--grain), linear-gradient(#f3ead2, #e3d6b6 82%, #cbbb97);
+  background-blend-mode: overlay, normal;
   color: var(--ink);
-  border: 1px solid #8f8a80;
+  border: 1px solid #6f6656;
+  box-shadow: inset 0 -4px 0 rgb(0 0 0 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.6);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -420,8 +492,9 @@ a { color: inherit; }
   width: calc(100% / 8 * 0.64);
   height: 58%;
   translate: -50% 0;
-  background: linear-gradient(#3a3a3e, #121214);
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.1), transparent 30%), linear-gradient(#45423e, #121110 70%, #262420);
   border: 1px solid #000;
+  box-shadow: 0 3px 4px rgb(0 0 0 / 0.5);
   z-index: 1;
 }
 .key:active { transform: none; filter: brightness(0.92); }
@@ -572,6 +645,8 @@ a { color: inherit; }
 .delay-time .seg > button { flex: 1; padding-inline: 4px; }
 .field-label, .field { font-size: 0.8rem; font-weight: 650; font-stretch: 87%; color: var(--muted); }
 .field { display: grid; gap: 6px; }
+.field.grow { flex: 1 1 140px; }
+.project-tools button { flex: 1 1 auto; padding-inline: 10px; }
 
 /* ---------- Song ---------- */
 
@@ -649,8 +724,10 @@ button.primary { background: var(--signal); color: var(--ink); border-color: #b2
   .stage { padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
   .view { padding-inline: 12px; }
   .pads { gap: 6px 5px; }
-  .scenes { margin-left: 0; width: 100%; }
-  .scenes button { flex: 1; }
+  .scenes { margin-left: 0; flex: 1; }
+  .scenes button { flex: 1; width: auto; }
+  .edit-tools button { width: 40px; }
+  .edit-tools .rec { width: auto; padding-inline: 8px; }
   .knobs { grid-template-columns: repeat(3, 1fr); }
 }
 
