@@ -2,84 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Step sequencer with sampled classic drum machines: TR-808, TR-909, LinnDrum, DMX, SP-12 and more.">
+  <meta name="theme-color" content="#1b1917">
+  <meta name="description" content="A pocket studio of vintage machines: two TB-303 style bass lines and sampled TR-808, TR-909, LinnDrum and more.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>drum_seq</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preload" href="vendor/fonts/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <script type="module" src="src/main.js"></script>
 </head>
 <body>
-  <main class="machine">
-    <header class="top">
-      <h1 class="logo">drum_seq <span>v1.0</span></h1>
-      <label class="field kit">
-        <span>Machine</span>
-        <select id="kit"></select>
-      </label>
-      <p id="status" class="status" role="status"></p>
+  <div class="app">
+    <header class="transport" aria-label="Transport">
+      <button id="play" class="play" type="button" aria-pressed="false" aria-label="Play" aria-keyshortcuts="Space">
+        <span class="play-icon" aria-hidden="true"></span>
+      </button>
+      <div class="tempo">
+        <button id="bpm-down" class="nudge" type="button" aria-label="Slower">−</button>
+        <div id="bpm" class="lcd" role="slider" tabindex="0" aria-label="Tempo in BPM" aria-valuemin="40" aria-valuemax="300">
+          <span class="lcd-digits"></span><span class="lcd-unit">bpm</span>
+        </div>
+        <button id="bpm-up" class="nudge" type="button" aria-label="Faster">+</button>
+        <button id="tap" class="tap" type="button">Tap</button>
+      </div>
+      <div id="scenes" class="scenes" role="group" aria-label="Scene"></div>
     </header>
 
-    <section class="transport" aria-label="Transport">
-      <button id="play" class="play" type="button" aria-pressed="false" aria-keyshortcuts="Space">
-        <span class="icon" aria-hidden="true"></span><span class="label">Play</span>
-      </button>
-      <div class="field">
-        <label for="bpm">Tempo</label>
-        <div class="bpm">
-          <input id="bpm" type="number" inputmode="numeric" step="1">
-          <button id="tap" type="button" aria-label="Tap tempo">Tap</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="swing">Swing <output id="swing-out" for="swing"></output></label>
-        <input id="swing" type="range" step="1">
-      </div>
-      <div class="field">
-        <label for="steps">Steps</label>
-        <select id="steps"></select>
-      </div>
-      <div class="field">
-        <label for="volume">Master <output id="volume-out" for="volume"></output></label>
-        <input id="volume" type="range" min="0" max="100" step="1">
-      </div>
-    </section>
+    <main class="stage">
+      <section id="view-bass1" class="view" aria-label="Bass line 1" data-view="bass1"></section>
+      <section id="view-bass2" class="view" aria-label="Bass line 2" data-view="bass2" hidden></section>
+      <section id="view-drums" class="view" aria-label="Drum machine" data-view="drums" hidden></section>
+      <section id="view-mixer" class="view" aria-label="Mixer" data-view="mixer" hidden></section>
+      <section id="view-song" class="view" aria-label="Song" data-view="song" hidden></section>
+    </main>
 
-    <section class="patterns" aria-label="Patterns">
-      <div id="slots" class="slots" role="group" aria-label="Pattern bank"></div>
-      <select id="preset" aria-label="Load a preset into this pattern">
-        <option value="">Load preset…</option>
-      </select>
-      <button id="clear" type="button">Clear</button>
-    </section>
-
-    <div class="grid-wrap">
-      <div id="grid" class="grid" aria-label="Step sequencer"></div>
-    </div>
-
-    <section class="voice-panel" aria-labelledby="voice-name">
-      <header>
-        <h2 id="voice-name"></h2>
-        <span id="voice-note" class="note"></span>
-        <button id="voice-reset" type="button">Reset</button>
-      </header>
-      <label class="field">Level <output id="knob-level-out"></output><input id="knob-level" type="range" min="0" max="100"></label>
-      <label class="field">Tune <output id="knob-tune-out"></output><input id="knob-tune" type="range" min="-12" max="12"></label>
-      <label class="field">Decay <output id="knob-decay-out"></output><input id="knob-decay" type="range" min="0" max="100"></label>
-      <label class="field">Tone <output id="knob-tone-out"></output><input id="knob-tone" type="range" min="0" max="100"></label>
-    </section>
-
-    <footer class="footer">
-      <p>
-        Space plays and stops · arrow keys move around the grid · click a sound's name to hear it.
-      </p>
-      <p>
-        By Gustavo Astudillo · <a href="https://github.com/taviztud/drum_seq">Source</a> ·
-        Samples from <a href="https://github.com/smpldsnds">smpldsnds</a> and the
-        <a href="https://www.youtube.com/@synthabuse">Synth Abuse</a> collection,
-        played with <a href="https://github.com/danigb/smplr">smplr</a>
-      </p>
-    </footer>
-  </main>
+    <nav class="tabs" aria-label="Machines">
+      <button type="button" data-tab="bass1" aria-current="page"><span class="tab-led" aria-hidden="true"></span>Bass 1</button>
+      <button type="button" data-tab="bass2"><span class="tab-led" aria-hidden="true"></span>Bass 2</button>
+      <button type="button" data-tab="drums"><span class="tab-led" aria-hidden="true"></span>Drums</button>
+      <button type="button" data-tab="mixer">Mixer</button>
+      <button type="button" data-tab="song">Song</button>
+    </nav>
+  </div>
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
 </body>
 </html>
