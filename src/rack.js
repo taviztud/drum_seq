@@ -149,7 +149,8 @@ function loadKit(ctx, def, { destination, storage, onProgress }) {
   return inst.ready.then(() => inst);
 }
 
-const KEY_VELOCITY = { normal: 82, accent: 100 };
+// 80 and 104 avoid the CP-80's 82..103 layer, whose A3 sample is missing upstream (the other pianos keep their layers).
+const KEY_VELOCITY = { normal: 80, accent: 104 };
 
 function loadKeys(ctx, def, { destination, storage, onProgress }) {
   // Electric pianos have several velocity layers; one range is enough and halves the download.
