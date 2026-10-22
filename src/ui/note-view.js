@@ -2,8 +2,9 @@
 // Tap a step, play its note on the keyboard; the cursor moves on, as on the TB-303.
 import { knob } from './knob.js';
 import {
-  NOTE_NAMES, CHORDS, MAX_LENGTH, keyOf, randomBass, presetBass, emptyStep, BASS_PRESET_NAMES, MELODY_PRESET_NAMES,
+  NOTE_NAMES, CHORDS, MAX_LENGTH, keyOf, presetBass, emptyStep, BASS_PRESET_NAMES, MELODY_PRESET_NAMES,
 } from '../bass.js';
+import { DENSITIES, generateLine, generateChords, mutateLine, inKey } from '../generate.js';
 import { BASS_KNOBS, SYNTH_PRESETS } from '../project.js';
 import { KEY_SOUNDS } from '../kits.js';
 
@@ -12,9 +13,9 @@ const WHITE = [0, 2, 4, 5, 7, 9, 11, 12];
 const BLACK = [[1, 1], [3, 2], [6, 4], [8, 5], [10, 6]]; // [note, white keys to its left]
 const SPOKEN = ['C', 'C sharp', 'D', 'D sharp', 'E', 'F', 'F sharp', 'G', 'G sharp', 'A', 'A sharp', 'B', 'high C'];
 // An array, not an object: an object would list the key '7' first.
-const CHORD_LABELS = [['', 'Note'], ['maj', 'Maj'], ['min', 'Min'], ['7', '7'], ['m7', 'm7'], ['sus4', 'Sus']];
-const CHORD_SPOKEN = { maj: 'major', min: 'minor', 7: 'seventh', m7: 'minor seventh', sus4: 'suspended fourth' };
-const CHORD_TAGS = { maj: '', min: 'm', 7: '7', m7: 'm7', sus4: 'sus' };
+const CHORD_LABELS = [['', 'Note'], ['maj', 'Maj'], ['min', 'Min'], ['7', '7'], ['m7', 'm7'], ['sus4', 'Sus'], ['dim', 'Dim']];
+const CHORD_SPOKEN = { maj: 'major', min: 'minor', 7: 'seventh', m7: 'minor seventh', sus4: 'suspended fourth', dim: 'diminished' };
+const CHORD_TAGS = { maj: '', min: 'm', 7: '7', m7: 'm7', sus4: 'sus', dim: '°' };
 
 function describe(step, i, { chords }) {
   if (!step.on) return `Step ${i + 1}: rest`;
@@ -28,12 +29,13 @@ function describe(step, i, { chords }) {
 }
 
 /**
- * config: { id, title, num, maker, plate (class list), line(), setLine(line), knobs: [{ id, label, min, max,
+ * config: { id, kind ('bass' | 'synth' | 'keys'), title, num, maker, plate (class list), line(), setLine(line), knobs: [{ id, label, min, max,
  * default, format, step }], values() (object the knobs edit), switches: [{ label, options: [[value, text]],
- * get(), set(value) }], base, chords(), lengths, slide(), linePresets, random, header (optional HTML) }
+ * get(), set(value) }], base, chords(), lengths, slide(), linePresets, header (optional HTML) }
  */
 export function createNoteView(root, app, config) {
   let selected = 0;
+  let density = 'some'; // how busy Random makes the line; per machine, not saved
   const chords = () => config.chords?.() ?? false;
   const slide = () => config.slide?.() ?? false;
   root.classList.add('machine', ...config.plate);
@@ -67,9 +69,11 @@ export function createNoteView(root, app, config) {
     </div>
     <div class="row tools">
       <button type="button" data-tool="random">Random</button>
+      <button type="button" data-tool="mutate" aria-label="Mutate: change a few steps">Mutate</button>
       <button type="button" data-tool="left" aria-label="Shift steps left">◀</button>
       <button type="button" data-tool="right" aria-label="Shift steps right">▶</button>
       <button type="button" data-tool="clear">Clear</button>
+      <div class="seg density" role="group" aria-label="Random density">${DENSITIES.map(([id, text]) => `<button type="button" data-density="${id}">${text}</button>`).join('')}</div>
       <select data-tool="preset" aria-label="Load a line"><option value="">Load a line…</option></select>
     </div>`;
 
@@ -114,7 +118,6 @@ export function createNoteView(root, app, config) {
   }));
   root.querySelector('.length-row').hidden = !config.lengths;
   root.querySelector('[data-mod="slide"]').hidden = !config.slide;
-  root.querySelector('[data-tool="random"]').hidden = !config.random;
   root.querySelector('[data-tool="preset"]').append(...config.linePresets.map((n) => new Option(n, n)));
 
   const padsEl = root.querySelector('.pads');
@@ -162,6 +165,7 @@ export function createNoteView(root, app, config) {
     root.querySelector('.length-row output').textContent = `${s.len} step${s.len > 1 ? 's' : ''}`;
     for (const { sw, seg } of switches) for (const b of seg.children) b.ariaPressed = String(b.value === String(sw.get()));
     for (const k of knobs) k.update(config.values()[k.dataset.knob]);
+    for (const b of root.querySelectorAll('[data-density]')) b.ariaPressed = String(b.dataset.density === density);
   }
 
   const edit = (fn) => { fn(config.line()[selected]); app.changed('pattern'); render(); };
@@ -209,17 +213,25 @@ export function createNoteView(root, app, config) {
   });
 
   const setLine = (line) => { config.setLine(line); app.changed('pattern'); render(); };
+  // Bass and synth follow the chords of this scene's Keys line, so the whole rack shares one harmony.
+  const harmony = () => ({ key: app.project.key, keysLine: app.scene().keys });
   root.querySelector('.tools').addEventListener('click', (e) => {
-    const tool = e.target.closest('button')?.dataset.tool;
+    const b = e.target.closest('button');
+    if (b?.dataset.density) { density = b.dataset.density; render(); return; }
+    const tool = b?.dataset.tool;
     const line = config.line();
-    if (tool === 'random') setLine(config.random(line.length));
+    const steps = line.length;
+    if (tool === 'random') {
+      setLine(config.kind === 'keys' ? generateChords({ steps, key: app.project.key, density })
+        : generateLine(config.kind, { steps, density, ...harmony() }));
+    } else if (tool === 'mutate') setLine(mutateLine(line, config.kind, harmony()));
     else if (tool === 'left') setLine([...line.slice(1), line[0]]);
     else if (tool === 'right') setLine([line.at(-1), ...line.slice(0, -1)]);
     else if (tool === 'clear') setLine(line.map(emptyStep));
   });
   root.querySelector('[data-tool="preset"]').addEventListener('change', (e) => {
     if (!e.target.value) return;
-    setLine(presetBass(e.target.value, config.line().length));
+    setLine(inKey(presetBass(e.target.value, config.line().length), app.project.key)); // examples are written in C minor
     e.target.value = '';
   });
 
@@ -245,12 +257,12 @@ const BASS_KNOB_VIEW = [
 export function createBassView(root, app) {
   const settings = () => app.project.bass[0].knobs;
   return createNoteView(root, app, {
-    id: 'bass1', title: 'Bass Line', maker: 'Computer controlled',
+    id: 'bass1', kind: 'bass', title: 'Bass Line', maker: 'Computer controlled',
     plate: ['bassline', 'silver'], base: 36,
     line: () => app.scene().bass[0], setLine: (line) => { app.scene().bass[0] = line; },
     knobs: BASS_KNOB_VIEW, values: settings,
     switches: [{ label: 'Waveform', options: [[0, 'Saw'], [1, 'Square']], get: () => Math.round(settings().waveform), set: (v) => { settings().waveform = v; } }],
-    slide: () => true, linePresets: BASS_PRESET_NAMES, random: randomBass,
+    slide: () => true, linePresets: BASS_PRESET_NAMES,
   });
 }
 
@@ -269,7 +281,7 @@ const SYNTH_KNOB_VIEW = [
 export function createSynthView(root, app) {
   const synth = () => app.project.synth;
   const view = createNoteView(root, app, {
-    id: 'synth', title: 'Synth', maker: 'Minimoog mono, Juno and Jupiter poly',
+    id: 'synth', kind: 'synth', title: 'Synth', maker: 'Minimoog mono, Juno and Jupiter poly',
     plate: ['synth'], base: 48,
     header: `<select data-sound-preset aria-label="Load a sound"><option value="">Load a sound…</option>${Object.keys(SYNTH_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select>`,
     line: () => app.scene().synth, setLine: (line) => { app.scene().synth = line; },
@@ -279,7 +291,7 @@ export function createSynthView(root, app) {
       { label: 'Chorus', options: [[0, 'Chorus off'], [1, 'I'], [2, 'II']], get: () => synth().chorus, set: (v) => { synth().chorus = v; } },
     ],
     chords: () => synth().mode === 'poly', slide: () => synth().mode === 'mono', lengths: true,
-    linePresets: MELODY_PRESET_NAMES, random: randomBass,
+    linePresets: MELODY_PRESET_NAMES,
   });
   root.querySelector('[data-sound-preset]').addEventListener('change', (e) => {
     if (!e.target.value) return;
@@ -293,7 +305,7 @@ export function createSynthView(root, app) {
 
 export function createKeysView(root, app) {
   const view = createNoteView(root, app, {
-    id: 'keys', title: 'Keys', maker: 'Tapes, tines and FM',
+    id: 'keys', kind: 'keys', title: 'Keys', maker: 'Tapes, tines and FM',
     plate: ['keys-plate'], base: 48,
     header: `<label class="kit-select"><span class="visually-hidden">Keyboard</span><select data-keys-sound>${KEY_SOUNDS.map((k) => `<option value="${k.id}">${k.name}</option>`).join('')}</select></label>
       <p class="kit-status" role="status"></p>`,

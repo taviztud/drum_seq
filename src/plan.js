@@ -13,8 +13,8 @@ export const NOTE_TRACKS = {
 };
 const noTracks = (value) => Object.fromEntries(Object.keys(NOTE_TRACKS).map((id) => [id, value()]));
 
-// Where playback is: scene, step inside it, place in the song, and notes held by a slide.
-export const startCursor = () => ({ pos: -1, scene: -1, songIndex: -1, held: noTracks(() => null) });
+// Where playback is: scene, step inside it, place in the song, its transpose, and notes held by a slide.
+export const startCursor = () => ({ pos: -1, scene: -1, songIndex: -1, tr: 0, held: noTracks(() => null) });
 
 /**
  * Move to the next step. A new bar picks its scene: the next song entry in song mode,
@@ -31,9 +31,10 @@ export function advance(project, cursor, queuedScene = null) {
   next.pos = 0;
   if (project.songMode && project.song.length) {
     next.songIndex = (cursor.songIndex + 1) % project.song.length;
-    next.scene = project.song[next.songIndex];
+    ({ scene: next.scene, tr: next.tr } = project.song[next.songIndex]);
   } else {
     next.scene = queuedScene ?? (cursor.scene >= 0 ? cursor.scene : project.scene);
+    next.tr = 0;
   }
   return next;
 }
@@ -62,7 +63,7 @@ export function stepEvents(project, cursor, time, stepSec) {
   const held = {};
   const notes = {};
   for (const [id, track] of Object.entries(NOTE_TRACKS)) {
-    const result = noteStep(track.line(scene), step, cursor.held[id], { base: track.base, poly: track.poly(project) });
+    const result = noteStep(track.line(scene), step, cursor.held[id], { base: track.base + cursor.tr, poly: track.poly(project) });
     held[id] = result.held;
     notes[id] = result.events.map(({ at: steps, ...e }) => ({ ...e, time: at + steps * stepSec }));
   }
@@ -72,7 +73,7 @@ export function stepEvents(project, cursor, time, stepSec) {
 // Every event of a whole render: `bars` repeats of the current scene, or the song once.
 export function planRender(project, { song = false, bars = 4 } = {}) {
   const p = { ...project, songMode: song };
-  const sceneList = song ? project.song : Array(bars).fill(project.scene);
+  const sceneList = song ? project.song.map((e) => e.scene) : Array(bars).fill(project.scene);
   const totalSteps = sceneList.reduce((sum, s) => sum + project.scenes[s].steps, 0);
   const stepSec = 60 / project.bpm / 4;
   const forced = song ? null : project.scene;

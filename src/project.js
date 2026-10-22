@@ -5,6 +5,7 @@ import {
 } from './pattern.js';
 import { createBass, resizeBass, normalizeBass, presetBass } from './bass.js';
 import { findKit, findKeySound } from './kits.js';
+import { SCALES } from './generate.js';
 
 export const SCENES = ['A', 'B', 'C', 'D'];
 export const BASSES = ['bass1'];
@@ -57,13 +58,14 @@ function demoScene(drums, bass, synth, keys) {
 
 export function createProject() {
   return {
-    version: 3,
+    version: 4,
     bpm: 126,
     swing: 54,
     volume: 88,
     scene: 0,
     songMode: false,
-    song: [0, 0, 1, 1, 2, 3],
+    song: [0, 0, 1, 1, 2, 3].map((scene) => ({ scene, tr: 0 })), // tr: transpose in semitones, as the 303's track mode
+    key: { root: 0, scale: 'minor' },
     scenes: [
       demoScene('House (909)', 'Acid 1', '', 'Chords: long pad'),
       demoScene('House (909)', 'Acid 2', 'Lead: minor run', 'Chords: Cm Ab Eb Bb'),
@@ -100,7 +102,11 @@ export function normalizeProject(raw) {
   p.scene = parseInRange(raw.scene, 0, SCENES.length - 1, 0);
   p.songMode = raw.songMode === true;
   if (Array.isArray(raw.song)) {
-    p.song = raw.song.filter((s) => Number.isInteger(s) && s >= 0 && s < SCENES.length).slice(0, MAX_SONG_LENGTH);
+    p.song = raw.song
+      .map((e) => (Number.isInteger(e) ? { scene: e, tr: 0 } : e)) // saves before transpose stored scene numbers
+      .filter((e) => Number.isInteger(e?.scene) && e.scene >= 0 && e.scene < SCENES.length)
+      .slice(0, MAX_SONG_LENGTH)
+      .map((e) => ({ scene: e.scene, tr: parseInRange(e.tr, -12, 12, 0) }));
   }
   if (Array.isArray(raw.scenes)) {
     p.scenes = p.scenes.map((fallback, i) => {
@@ -117,6 +123,7 @@ export function normalizeProject(raw) {
       };
     });
   }
+  p.key = { root: parseInRange(raw.key?.root, 0, 11, 0), scale: Object.hasOwn(SCALES, raw.key?.scale) ? raw.key.scale : 'minor' };
   p.drums.kit = findKit(raw.drums?.kit).id;
   if (VOICES.some((v) => v.id === raw.drums?.selected)) p.drums.selected = raw.drums.selected;
   for (const { id } of VOICES) {

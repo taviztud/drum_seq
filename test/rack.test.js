@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { noteStep, createBass, keyOf, parseBass, presetBass, randomBass, normalizeBass, resizeBass, BASS_PRESET_NAMES, MELODY_PRESET_NAMES, GATE } from '../src/bass.js';
+import { noteStep, createBass, keyOf, parseBass, presetBass, normalizeBass, resizeBass, BASS_PRESET_NAMES, MELODY_PRESET_NAMES, GATE } from '../src/bass.js';
 import { createProject, normalizeProject, migrateV1, resizeScene, SCENES } from '../src/project.js';
 import { advance, startCursor, stepEvents, planRender, NOTE_TRACKS } from '../src/plan.js';
 
@@ -37,14 +37,6 @@ test('note names, octaves and presets parse', () => {
   assert.equal(presetBass('Acid 1').filter((s) => s.on).length > 8, true);
 });
 
-test('random lines are valid and reproducible', () => {
-  const seeded = () => { let x = 7; return () => ((x = (x * 16807) % 2147483647) / 2147483647); };
-  const a = randomBass(16, seeded()), b = randomBass(16, seeded());
-  assert.deepEqual(a, b);
-  assert.equal(a[0].on, true);
-  for (const s of a) assert.ok(s.note >= 0 && s.note <= 12 && [-1, 0, 1].includes(s.oct));
-});
-
 test('bass data from storage is repaired', () => {
   const s = normalizeBass([{ on: true, note: 40, oct: 5, accent: 'yes' }, null], 4);
   assert.deepEqual(s[0], { on: true, note: 0, oct: 0, accent: false, slide: false, chord: '', len: 1 });
@@ -55,7 +47,8 @@ test('bass data from storage is repaired', () => {
 test('project survives junk from storage and keeps good values', () => {
   const p = normalizeProject({ bpm: 9999, song: [0, 9, 'x', 3], scenes: [{ steps: 5 }], mixer: { bass1: { level: 3, pan: -7 } }, fx: { delayDivision: 'nope', feedback: 2 } });
   assert.equal(p.bpm, 300);
-  assert.deepEqual(p.song, [0, 3]);
+  assert.deepEqual(p.song, [{ scene: 0, tr: 0 }, { scene: 3, tr: 0 }], 'old scene numbers load as untransposed bars');
+  assert.deepEqual(p.key, { root: 0, scale: 'minor' });
   assert.equal(p.scenes[0].steps, 16);
   assert.equal(p.scenes[0].bass[0].length, 16);
   assert.equal(p.mixer.bass1.level, 1);
@@ -83,7 +76,7 @@ test('scenes change at the bar line: queued scene, or the next song entry', () =
   for (let i = 0; i < 10; i++) c = advance(p, c, 2);
   c = advance(p, c, 2);
   assert.deepEqual([c.scene, c.pos], [2, 0]);
-  const song = { ...p, songMode: true, song: [3, 1] };
+  const song = { ...p, songMode: true, song: [{ scene: 3, tr: 0 }, { scene: 1, tr: 0 }] };
   let s = advance(song, startCursor());
   assert.equal(s.scene, 3);
   for (let i = 0; i < 16; i++) s = advance(song, s);
@@ -118,7 +111,7 @@ test('step events: swing, accent and mute apply to drums; 303 notes carry times'
 
 test('render plans cover the song and release every note', () => {
   const p = createProject();
-  p.song = [0, 1];
+  p.song = [{ scene: 0, tr: 0 }, { scene: 1, tr: 0 }];
   const r = planRender(p, { song: true });
   assert.equal(r.duration, 32 * 60 / p.bpm / 4);
   for (const list of Object.values(r.notes)) {
@@ -168,4 +161,18 @@ test('every melody preset parses, and the demo song ends with nothing hanging on
     for (const [key, n] of open) assert.ok(n <= 0, `${id} key ${key} left on`);
     assert.ok(list.length > 0, `${id} plays in the demo song`);
   }
+});
+
+test('a transposed song bar moves the note machines, not the drums', () => {
+  const p = createProject();
+  p.songMode = true;
+  p.song = [{ scene: 0, tr: 5 }];
+  p.scenes[0].bass[0] = resizeBass(line('C'), 16);
+  const c = advance(p, startCursor());
+  assert.equal(c.tr, 5);
+  const ev = stepEvents(p, c, 0, 0.125);
+  assert.equal(ev.notes.bass1[0].key, 36 + 5);
+  assert.deepEqual(ev.drums, stepEvents({ ...p, song: [{ scene: 0, tr: 0 }] }, advance({ ...p, song: [{ scene: 0, tr: 0 }] }, startCursor()), 0, 0.125).drums);
+  const r = planRender(p, { song: true });
+  assert.equal(r.notes.bass1[0].key, 41);
 });

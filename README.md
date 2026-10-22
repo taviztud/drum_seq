@@ -37,6 +37,20 @@ Es la idea de ReBirth, en el navegador.
   - Si cambias de escena mientras suena, el cambio entra al empezar el siguiente compás, como en el hardware.
   - Exporta 4 compases o la canción completa a WAV. En el móvil abre el menú de compartir.
 
+## Generación musical
+
+- **Tonalidad:** en Song eliges tónica y escala (menor, mayor, dórica, frigia, mixolidia o menor armónica).
+  Random, Mutate y las líneas de ejemplo la siguen. Cambiar la tónica mueve todas las líneas a la nueva tonalidad.
+- **Random** en Bass, Synth y Keys, con densidad Few, Some o Many:
+  - El ritmo se reparte de forma euclidiana, así cada línea tiene siempre la misma cantidad de notas.
+  - Se arma un motivo de 8 pasos que se repite con variaciones (A A′ A A″).
+  - Las notas avanzan por grados de la escala y la línea termina en la tónica o la quinta del acorde.
+  - En Keys, Random elige una progresión conocida (i–VI–III–VII, I–V–vi–IV…) con acordes diatónicos.
+- **Una sola armonía:** en los tiempos fuertes, el bajo y el synth tocan notas del acorde que está sonando en Keys.
+- **Mutate:** cambia 2 o 3 pasos de la línea actual, sin perder la idea.
+- **Transposición por compás:** en Song, cada compás puede llevar su transposición (−12 a +12), como el Track Mode
+  del TB-303. Así, con una sola escena, sale una progresión completa. La batería no se transpone.
+
 ## Pensado para el móvil
 
 - Una máquina por pantalla y la barra de máquinas abajo, al alcance del pulgar.
@@ -72,7 +86,8 @@ La primera vez que eliges cada caja de ritmos o sonido de Keys, sus samples se d
 | `src/rack.js` | Audio: grafo del rack, mixer, efectos, carga de kits y exportación offline |
 | `src/plan.js` | Convierte el proyecto en eventos con tiempo exacto (lo usan la reproducción y la exportación) |
 | `src/project.js` | Modelo del proyecto, validación de lo guardado y migración desde la versión anterior |
-| `src/bass.js` | Pasos de las máquinas de notas: gate, slide, acordes, duración, presets y generador aleatorio |
+| `src/bass.js` | Pasos de las máquinas de notas: gate, slide, acordes, duración y presets |
+| `src/generate.js` | Escalas, Random, Mutate, progresiones y cambios de tonalidad |
 | `src/pattern.js`, `src/kits.js` | Patrones de batería, choke, swing y la librería de máquinas |
 | `src/worklets/open303-processor.js` | El motor del 303 (port de Open303) |
 | `src/worklets/va-processor.js` | El motor del Synth (analógico virtual) |

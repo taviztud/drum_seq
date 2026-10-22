@@ -430,11 +430,12 @@ a { color: inherit; }
 .mods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .mods .seg { grid-column: 1 / -1; display: flex; }
 .mods .seg > button { flex: 1; }
-.tools { display: grid; grid-template-columns: 1fr auto auto 1fr; gap: 8px; }
+.tools { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; }
 .tools [data-tool="left"], .tools [data-tool="right"] { width: 52px; padding: 0; }
+.tools .density { grid-column: 2 / -1; display: flex; }
+.tools .density button { flex: 1; }
 .tools select { grid-column: 1 / -1; }
 .rhythm .tools { grid-template-columns: 1fr 1fr; }
-.tools:has([data-tool="random"][hidden]) { grid-template-columns: auto auto 1fr; }
 .silver button:not(.key):not(.pad), .silver select { border-color: rgb(0 0 0 / 0.3); }
 
 /* ---------- Drum machine ---------- */
@@ -583,6 +584,10 @@ a { color: inherit; }
 .block.s2 { background: var(--g1); }
 .block.s3 { background: var(--g0); }
 .block.now { outline: 3px solid var(--paper); outline-offset: 2px; }
+.block { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.block small { font-size: 0.65rem; font-weight: 700; font-stretch: 90%; }
+.block.selected { box-shadow: 0 0 0 3px var(--signal); }
+.bar-edit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; }
 .add-row button { flex: 1; padding-inline: 6px; }
 .switch { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 650; font-stretch: 87%; }
 .switch input {

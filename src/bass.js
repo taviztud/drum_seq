@@ -6,7 +6,7 @@ export const BASE_KEY = 36; // C2, the TB-303's home octave
 export const GATE = 0.5; // a note releases half a step before its length ends: a 1-step note is the 303's half-step gate
 export const MAX_LENGTH = 16;
 // Chord shapes in semitones above the root. '' is a single note.
-export const CHORDS = { '': [0], maj: [0, 4, 7], min: [0, 3, 7], 7: [0, 4, 7, 10], m7: [0, 3, 7, 10], sus4: [0, 5, 7] };
+export const CHORDS = { '': [0], maj: [0, 4, 7], min: [0, 3, 7], 7: [0, 4, 7, 10], m7: [0, 3, 7, 10], sus4: [0, 5, 7], dim: [0, 3, 6] };
 
 export const emptyStep = () => ({ on: false, note: 0, oct: 0, accent: false, slide: false, chord: '', len: 1 });
 export const createBass = (steps = 16) => Array.from({ length: steps }, emptyStep);
@@ -55,29 +55,8 @@ export function noteStep(line, i, held, { base = BASE_KEY, poly = false } = {}) 
   return { events, held: null };
 }
 
-/**
- * Random acid line in a minor pentatonic feel, like ReBirth's pattern randomizer.
- * `rng` is injectable so tests are deterministic.
- */
-export function randomBass(steps = 16, rng = Math.random) {
-  const scale = [0, 3, 5, 7, 10, 12];
-  const pick = (list) => list[Math.floor(rng() * list.length)];
-  return Array.from({ length: steps }, (_, i) => {
-    const on = i === 0 || rng() < 0.72;
-    const r = rng();
-    return {
-      ...emptyStep(),
-      on,
-      note: pick(scale),
-      oct: r < 0.14 ? -1 : r > 0.84 ? 1 : 0,
-      accent: on && rng() < 0.28,
-      slide: on && rng() < 0.22,
-    };
-  });
-}
-
 // Presets written one token per step: "-" rest, then note name, optional "+"/"-" octave, optional chord
-// (maj, min, 7, m7, sus4), "a" accent, "s" slide, and ":n" for a length of n steps. E.g. "G#-maj:4".
+// (maj, min, 7, m7, sus4, dim), "a" accent, "s" slide, and ":n" for a length of n steps. E.g. "G#-maj:4".
 const BASS_PRESETS = {
   'Acid 1': 'C C+ - C D#a C+s C - G- C C+a - D#s F - C+',
   'Acid 2': 'C- C- C+as C- - C- D#s F G-a C- - C+ C- A#-s C C-',
@@ -96,7 +75,7 @@ export const MELODY_PRESET_NAMES = Object.keys(MELODY_PRESETS);
 
 export function parseBass(text) {
   return text.trim().split(/\s+/).map((token) => {
-    const m = /^([A-G]#?)([+-]?)(maj|min|m7|7|sus4)?([as]*)(?::(\d+))?$/.exec(token);
+    const m = /^([A-G]#?)([+-]?)(maj|min|m7|7|sus4|dim)?([as]*)(?::(\d+))?$/.exec(token);
     if (!m) return emptyStep();
     return {
       ...emptyStep(),
