@@ -100,7 +100,10 @@ function buildGraph(ctx, project, bassEvents = [[], []]) {
   return { channels, basses, masterMeter, apply };
 }
 
-function loadKit(ctx, def, { destination, storage, scheduler, onProgress }) {
+function loadKit(ctx, def, { destination, storage, onProgress }) {
+  // Hand every note to Web Audio the moment it is planned, like the 303 events. smplr's default
+  // scheduler would hold notes more than 200 ms ahead for a main-thread timer, which a busy phone delays.
+  const scheduler = Scheduler(ctx, { lookaheadMs: 1e12 });
   const samples = Object.values(def.map).filter(Boolean);
   const options = { destination, storage, scheduler, onLoadProgress: onProgress };
   // Load only the samples this kit uses. DrumMachine kits get their sample list directly
@@ -143,7 +146,9 @@ export async function createRack({ project, queued, onSceneChange, onStep }) {
   let pending = []; // drum notes scheduled but maybe not heard yet, so Stop can cancel them
   let cursor = startCursor();
 
-  const seq = Sequencer(ctx, { stepSize: '16n' });
+  // Plan 400 ms ahead: a busy phone can stall the main thread past smplr's 200 ms default,
+  // and then every machine plays late. Edits still reach the sound within half a second.
+  const seq = Sequencer(ctx, { stepSize: '16n', lookaheadMs: 400, intervalMs: 25 });
   seq.on('step', (_, time) => {
     const p = project();
     const wanted = queued();
@@ -171,14 +176,14 @@ export async function createRack({ project, queued, onSceneChange, onStep }) {
   return {
     get playing() { return seq.state === 'playing'; },
     get kit() { return kit?.def ?? null; },
-    now: () => ctx.currentTime,
+    now: () => ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0), // what is heard right now (Bluetooth adds a lot)
     apply(p) { seq.bpm = p.bpm; graph.apply(p); },
 
     async start() {
       await ctx.resume(); // browsers keep audio suspended until a user gesture
       if (seq.state === 'playing') return;
       cursor = startCursor();
-      seq.start();
+      seq.start(-60); // half a 16th of pre-roll, so the first beat is planned before it is due
     },
 
     stop() {
@@ -231,9 +236,8 @@ export async function createRack({ project, queued, onSceneChange, onStep }) {
       await off.audioWorklet.addModule(WORKLET_URL);
       const offGraph = buildGraph(off, p, plan.bass);
       onProgress?.('Loading samples…');
-      // A huge lookahead hands every note to the audio graph before rendering starts.
       const def = findKit(p.drums.kit);
-      const inst = await loadKit(off, def, { destination: offGraph.channels.drums.input, storage, scheduler: Scheduler(off, { lookaheadMs: 1e12 }) });
+      const inst = await loadKit(off, def, { destination: offGraph.channels.drums.input, storage });
       for (const hit of plan.drums) triggerDrum({ def, inst }, hit, p.drums.voices[hit.voice]);
       onProgress?.('Rendering…');
       const buffer = await off.startRendering();

@@ -3,6 +3,11 @@ import { CHANNELS, DELAY_DIVISIONS } from '../project.js';
 import { SWING } from '../pattern.js';
 
 const NAMES = { bass1: 'Bass 1', bass2: 'Bass 2', drums: 'Drums' };
+// 3/16 and 3/8 are dotted notes: the classic syncopated echo, written the way musicians say it.
+const DELAY_NAMES = {
+  '1/16': ['1/16', 'Sixteenth'], '1/8': ['1/8', 'Eighth'], '3/16': ['1/8 D', 'Dotted eighth'],
+  '1/4': ['1/4', 'Quarter'], '3/8': ['1/4 D', 'Dotted quarter'],
+};
 const pct = (v) => `${Math.round(v * 100)}`;
 const panText = (v) => (Math.abs(v) < 0.02 ? 'C' : `${v < 0 ? 'L' : 'R'}${Math.round(Math.abs(v) * 100)}`);
 const dbText = (v) => (v === 0 ? '−∞' : `${(20 * Math.log10(v * v)).toFixed(1)}`); // the fader has an audio (squared) taper
@@ -110,7 +115,7 @@ export function createMixerView(root, app) {
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.division = d;
-    b.textContent = d;
+    [b.textContent, b.ariaLabel] = DELAY_NAMES[d];
     return b;
   }));
   seg.addEventListener('click', (e) => {
