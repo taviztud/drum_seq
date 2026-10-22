@@ -1,6 +1,6 @@
 // Offline app shell. Drum samples are cached separately by smplr's CacheStorage.
 // Bump VERSION when shipping changes so returning visitors get the new files.
-const VERSION = 'drum_seq-v3.2.0';
+const VERSION = 'drum_seq-v3.3.0';
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
   'src/main.js', 'src/rack.js', 'src/plan.js', 'src/project.js', 'src/pattern.js', 'src/bass.js', 'src/generate.js', 'src/kits.js',

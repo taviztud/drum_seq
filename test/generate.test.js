@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHORDS, presetBass, BASS_PRESET_NAMES, MELODY_PRESET_NAMES } from '../src/bass.js';
 import {
-  SCALES, euclid, diatonicChord, chordAt, generateLine, generateChords, generateDrums, mutateLine, transposeLine, inKey,
+  SCALES, euclid, diatonicChord, chordAt, generateLine, generateChords, generateDrums, mutateDrums, mutateLine, transposeLine, inKey,
 } from '../src/generate.js';
 import { ROWS } from '../src/pattern.js';
+import { KITS, CHARACTERS, findKit, kitVariant, currentKit, hasCharacters } from '../src/kits.js';
+import { normalizeProject } from '../src/project.js';
 
 const seeded = (seed) => { let x = seed; return () => ((x = (x * 16807) % 2147483647) / 2147483647); };
 const abs = (s) => 12 * s.oct + s.note;
@@ -107,4 +109,34 @@ test('random drums keep the backbeat and get busier with density', () => {
     }
   }
   assert.ok(total.few < total.some && total.some < total.many, JSON.stringify(total));
+});
+
+test('drum mutate varies a groove but keeps the kick on 1 and the backbeat', () => {
+  for (let seed = 1; seed < 60; seed++) {
+    const rng = seeded(seed);
+    const before = generateDrums({ steps: 32, density: 'some', rng });
+    const after = mutateDrums(before, { rng });
+    let changed = 0;
+    for (const id of ROWS) for (let i = 0; i < 32; i++) changed += before[id][i] !== after[id][i];
+    assert.ok(changed <= 6, `${changed} cells changed`); // a kick nudge moves one hit: two cells
+    for (const i of [0, 16]) assert.ok(after.bd[i], 'kick on the one');
+    for (const i of [4, 12, 20, 28]) assert.equal(after.sd[i] || after.cp[i], before.sd[i] || before.cp[i], 'backbeat kept');
+  }
+});
+
+test('a Character swaps the sample set and names, and only for sampler-era kits', () => {
+  const sp12 = findKit('sp12');
+  const punch = kitVariant(sp12, 'punch');
+  assert.equal(punch.id, 'sp12:punch');
+  assert.equal(punch.source.set, '2/Slammed');
+  assert.equal(punch.map.bd, 'SP12 Kick 1 [Slam]');
+  assert.equal(punch.map.ht, null, 'missing voices stay missing');
+  assert.equal(kitVariant(sp12, 'dry'), sp12);
+  assert.equal(kitVariant(findKit('tr909'), 'punch'), findKit('tr909'), 'other kits play as they are');
+  assert.ok(KITS.filter(hasCharacters).length >= 7);
+  assert.deepEqual(KITS.map((k) => k.year), KITS.map((k) => k.year).sort(), 'kits listed by year');
+  assert.equal(currentKit({ kit: 'drumulator', character: 'bits' }).map.cy, 'Drumulator Cymbal [Bit 3]');
+  assert.equal(normalizeProject({ drums: { kit: 'rx5', character: 'nope' } }).drums.character, 'dry');
+  assert.equal(normalizeProject({ drums: { kit: 'rx5', character: 'room' } }).drums.character, 'room');
+  assert.equal(CHARACTERS[0].id, 'dry');
 });

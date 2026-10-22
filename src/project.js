@@ -4,7 +4,7 @@ import {
   VOICES, STEP_OPTIONS, BPM, SWING, createPattern, resize, presetPattern, normalizePattern, parseInRange,
 } from './pattern.js';
 import { createBass, resizeBass, normalizeBass, presetBass } from './bass.js';
-import { findKit, findKeySound } from './kits.js';
+import { findKit, findKeySound, CHARACTERS } from './kits.js';
 import { SCALES } from './generate.js';
 
 export const SCENES = ['A', 'B', 'C', 'D'];
@@ -76,7 +76,7 @@ export function createProject() {
       demoScene('Breakbeat', 'Squelch', 'Lead: arpeggio', 'Chords: house stabs'),
       demoScene('Electro (808)', 'Acid 1', 'Lead: minor run', 'Chords: Cm Ab Eb Bb'),
     ],
-    drums: { kit: 'tr909', selected: 'bd', voices: Object.fromEntries(VOICES.map((v) => [v.id, { ...DRUM_VOICE }])) },
+    drums: { kit: 'tr909', character: 'dry', selected: 'bd', voices: Object.fromEntries(VOICES.map((v) => [v.id, { ...DRUM_VOICE }])) },
     bass: [{ knobs: knobDefaults() }],
     synth: structuredClone(SYNTH_PRESETS['Mini lead']),
     keys: { sound: 'mk2-violins', knobs: { ...KEYS_KNOBS } },
@@ -131,6 +131,7 @@ export function normalizeProject(raw) {
   }
   p.key = { root: parseInRange(raw.key?.root, 0, 11, 0), scale: Object.hasOwn(SCALES, raw.key?.scale) ? raw.key.scale : 'minor' };
   p.drums.kit = findKit(raw.drums?.kit).id;
+  if (CHARACTERS.some((c) => c.id === raw.drums?.character)) p.drums.character = raw.drums.character;
   if (VOICES.some((v) => v.id === raw.drums?.selected)) p.drums.selected = raw.drums.selected;
   for (const { id } of VOICES) {
     const v = raw.drums?.voices?.[id] ?? {};

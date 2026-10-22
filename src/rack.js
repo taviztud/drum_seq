@@ -5,7 +5,7 @@ import {
 } from '../vendor/smplr-1.1.0.mjs';
 import { advance, startCursor, stepEvents, planRender, VELOCITY } from './plan.js';
 import { CHANNELS, BASSES, DELAY_DIVISIONS, SYNTH_KNOBS } from './project.js';
-import { findKit, findKeySound } from './kits.js';
+import { currentKit, findKeySound } from './kits.js';
 
 const WORKLETS = ['open303-processor.js', 'va-processor.js'].map((f) => new URL(`./worklets/${f}`, import.meta.url));
 const NODE_TRACKS = ['bass1', 'synth']; // machines played by an AudioWorklet voice
@@ -273,8 +273,9 @@ export async function createRack({ project, queued, onStep }) {
     onStep({ scene: cursor.scene, pos: cursor.pos, songIndex: cursor.songIndex, time, drums: ev.drums.map((d) => d.voice), notes: sounding });
   });
 
+  const scope = new Float32Array(512); // every meter reads into this one buffer: no garbage at 60 frames a second
   function level(analyser) {
-    const data = new Float32Array(analyser.fftSize);
+    const data = scope;
     analyser.getFloatTimeDomainData(data);
     let peak = 0;
     for (const v of data) peak = Math.max(peak, Math.abs(v));
@@ -303,8 +304,9 @@ export async function createRack({ project, queued, onStep }) {
       cursor = startCursor();
     },
 
-    loadKit: (id, onProgress) => use('kit', findKit(id), loadKit, graph.channels.drums.input, onProgress),
-    loadKeys: (id, onProgress) => use('keys', findKeySound(id), loadKeys, graph.channels.keys.input, onProgress),
+    // `def` is a kit (with its Character) from kits.js, or a keys sound.
+    loadKit: (def, onProgress) => use('kit', def, loadKit, graph.channels.drums.input, onProgress),
+    loadKeys: (def, onProgress) => use('keys', def, loadKeys, graph.channels.keys.input, onProgress),
 
     // Pads and keys play right away, as on the hardware.
     async auditionDrum(voice, params) {
@@ -344,7 +346,7 @@ export async function createRack({ project, queued, onStep }) {
       await addWorklets(off);
       const offGraph = buildGraph(off, p, plan.notes);
       onProgress?.('Loading samples…');
-      const kitDef = findKit(p.drums.kit);
+      const kitDef = currentKit(p.drums);
       const [kit, keys] = await Promise.all([
         loadKit(off, kitDef, { destination: offGraph.channels.drums.input, storage }),
         loadKeys(off, findKeySound(p.keys.sound), { destination: offGraph.channels.keys.input, storage }),

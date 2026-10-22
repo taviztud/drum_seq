@@ -1,6 +1,7 @@
 // Classic drum machines, sampled from the original hardware (credits in the page footer).
 // Each kit maps the 10 voices to one sample; null means the machine never had that sound.
 // `dm` = smplr DrumMachine collection (folder URL), `abuse` = smplr DrumAbuse (Synth Abuse) collection.
+// The sampler-era kits (set '2/Dry') also come in every Character below. The RX5 has no toms: its timbales stand in.
 export const KITS = [
   {
     id: 'tr808', name: 'Roland TR-808', year: 1980,
@@ -60,6 +61,38 @@ export const KITS = [
     },
   },
   {
+    id: 'drumulator', name: 'E-mu Drumulator', year: 1983,
+    source: { type: 'abuse', machine: 'emu-drumulator', set: '2/Dry' },
+    map: {
+      bd: 'Drumulator Bassdrm', sd: 'Drumulator Snare', lt: 'Drumulator Tom Low', ht: 'Drumulator Tom Hi', rs: 'Drumulator Rim',
+      cp: 'Drumulator Clap', cb: 'Drumulator Cow bell', ch: 'Drumulator Closed Hi Hat', oh: 'Drumulator Open Hi Hat', cy: 'Drumulator Cymbal',
+    },
+  },
+  {
+    id: 'dx', name: 'Oberheim DX', year: 1983,
+    source: { type: 'abuse', machine: 'oberheim-dx', set: '2/Dry' },
+    map: {
+      bd: 'DX Bassdrum', sd: 'DX Snare', lt: 'DX Tom Low', ht: 'DX Tom Hi', rs: null,
+      cp: null, cb: null, ch: 'DX Closed Hi Hat', oh: 'DX Open Hi Hat', cy: null,
+    },
+  },
+  {
+    id: 'linn9000', name: 'Linn 9000', year: 1984,
+    source: { type: 'abuse', machine: 'linn-9000', set: '2/Dry' },
+    map: {
+      bd: '9000 Kick 1', sd: '9000 Snare 1', lt: '9000 Tom 4', ht: '9000 Tom 1', rs: '9000 Rim 1',
+      cp: '9000 Clap 1', cb: '9000 Cowbell 1', ch: '9000 Closed Hi Hat 1', oh: '9000 Open Hi Hat 1', cy: '9000 Crash 1',
+    },
+  },
+  {
+    id: 'drumtraks', name: 'Sequential DrumTraks', year: 1984,
+    source: { type: 'abuse', machine: 'sequential-circuits-drumtraks', set: '2/Dry' },
+    map: {
+      bd: 'TRKS Bassdrum', sd: 'TRKS Snare', lt: 'TRKS Tom Low', ht: 'TRKS Tom Hi', rs: null,
+      cp: 'TRKS Clap', cb: 'TRKS Cowbell', ch: 'TRKS Closed Hi Hat', oh: 'TRKS Open Hi Hat', cy: 'TRKS Crash',
+    },
+  },
+  {
     id: 'tr707', name: 'Roland TR-707', year: 1985,
     source: { type: 'abuse', machine: 'roland-tr-707', set: '1' },
     map: {
@@ -75,9 +108,51 @@ export const KITS = [
       cp: 'SP12 Clap', cb: null, ch: 'SP12 Closed Hi Hat', oh: 'SP12 Open Hi Hat', cy: null,
     },
   },
+  {
+    id: 'rx5', name: 'Yamaha RX5', year: 1986,
+    source: { type: 'abuse', machine: 'yamaha-rx-5', set: '2/Dry' },
+    map: {
+      bd: 'RX5 Bassdrum 1', sd: 'RX5 Snare 1', lt: 'RX5 Timba Low', ht: 'RX5 Timba Hi', rs: 'RX5 Rim',
+      cp: 'RX5 Clap', cb: null, ch: 'RX5 Closed Hi Hat', oh: 'RX5 Open Hi Hat', cy: 'RX5 Crash',
+    },
+  },
+  {
+    id: 'ddd1', name: 'Korg DDD-1', year: 1986,
+    source: { type: 'abuse', machine: 'korg-ddd-1', set: '2/Dry' },
+    map: {
+      bd: 'DDD1 Kick', sd: 'DDD1 Snare 1', lt: 'DDD1 Tom 3', ht: 'DDD1 Tom 1', rs: 'DDD1 Rimshot',
+      cp: 'DDD1 Clap 1', cb: 'DDD1 Cowbell 2', ch: 'DDD1 Closed Hi Hat 1', oh: 'DDD1 Open Hi Hat 1', cy: 'DDD1 Crash 1',
+    },
+  },
 ];
 
 export const findKit = (id) => KITS.find((k) => k.id === id) ?? KITS[0];
+
+// Character: the Synth Abuse '2/…' sets record every sound of a machine five ways, named by a suffix.
+export const CHARACTERS = [
+  { id: 'dry', name: 'Dry', set: '2/Dry', suffix: '' },
+  { id: 'punch', name: 'Punch', set: '2/Slammed', suffix: ' [Slam]' },
+  { id: 'room', name: 'Room', set: '2/Wet', suffix: ' [Long]' },
+  { id: 'bits', name: '8-bit', set: '2/8bit Degraded [Mono]', suffix: ' [Bit 3]' },
+  { id: 'dirt', name: 'Dirt', set: '2/Glitch & Distort', suffix: ' [Dist 1]' },
+];
+export const hasCharacters = (kit) => kit.source.set === '2/Dry';
+
+/** The kit as heard with a Character: same voices, another sample set. Its own id, so it caches apart. */
+export function kitVariant(kit, characterId) {
+  const c = CHARACTERS.find((x) => x.id === characterId);
+  if (!c || c.id === 'dry' || !hasCharacters(kit)) return kit;
+  return {
+    ...kit,
+    id: `${kit.id}:${c.id}`,
+    name: `${kit.name} (${c.name})`,
+    source: { ...kit.source, set: c.set },
+    map: Object.fromEntries(Object.entries(kit.map).map(([voice, name]) => [voice, name && name + c.suffix])),
+  };
+}
+
+// The kit the project plays: its machine and Character.
+export const currentKit = (drums) => kitVariant(findKit(drums.kit), drums.character);
 
 // Keys: vintage keyboards, sampled. Mellotron tapes (archive.org Mellotron archive; license unclear),
 // Greg Sullivan's electric pianos (CC BY 3.0) and the VCSL TX81Z FM piano (CC0), all via smplr.
