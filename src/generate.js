@@ -204,3 +204,30 @@ export function generateDrums({ steps, density = 'some', rng = Math.random }) {
   if (density !== 'few' && rng() < 0.3) rows.cy[0] = true;
   return rows;
 }
+
+// Steps a groove keeps: the kick on the one of each bar, and the backbeat on 2 and 4.
+const anchored = (id, i) => (id === 'bd' && i % 16 === 0) || ((id === 'sd' || id === 'cp') && i % 8 === 4);
+
+/** Change 2 or 3 things in a drum pattern and keep its groove: hats and percussion, ghost snares, a kick nudge, an accent. */
+export function mutateDrums(rows, { rng = Math.random } = {}) {
+  const out = Object.fromEntries(Object.entries(rows).map(([id, row]) => [id, [...row]]));
+  const steps = out.bd.length;
+  const changes = 2 + (rng() < 0.5 ? 1 : 0);
+  for (let c = 0; c < changes; c++) {
+    const i = Math.floor(rng() * steps);
+    const r = rng();
+    if (r < 0.35) {
+      const id = pick(['ch', 'oh', 'rs', 'cb'], rng);
+      out[id][i] = !out[id][i];
+    } else if (r < 0.55) {
+      if (i % 4 && !anchored('sd', i)) out.sd[i] = !out.sd[i]; // a ghost snare off the beat
+    } else if (r < 0.8) {
+      const kicks = out.bd.flatMap((on, k) => (on && !anchored('bd', k) ? [k] : []));
+      if (!kicks.length) continue;
+      const from = pick(kicks, rng);
+      const to = (from + (rng() < 0.5 ? 1 : -1) + steps) % steps;
+      if (!out.bd[to]) { out.bd[from] = false; out.bd[to] = true; }
+    } else out.ac[i] = !out.ac[i];
+  }
+  return out;
+}

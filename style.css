@@ -509,7 +509,9 @@ a { color: inherit; }
 .tools .density button { flex: 1; }
 .tools select { grid-column: 1 / -1; }
 .rhythm .tools { grid-template-columns: 1fr 1fr; }
-.rhythm .tools .density { grid-column: auto; }
+.rhythm .tools .density { grid-column: 1 / -1; }
+.character { display: flex; }
+.character > button { flex: 1; padding-inline: 4px; }
 .silver button:not(.key):not(.pad), .silver select { border-color: rgb(0 0 0 / 0.3); }
 
 /* ---------- Drum machine ---------- */

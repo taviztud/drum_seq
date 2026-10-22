@@ -292,7 +292,7 @@ export function createSynthView(root, app) {
   const view = createNoteView(root, app, {
     id: 'synth', kind: 'synth', title: 'Synth', maker: 'Minimoog mono, Juno and Jupiter poly',
     plate: ['synth'], base: 48,
-    header: `<select data-sound-preset aria-label="Load a sound"><option value="">Load a sound…</option>${Object.keys(SYNTH_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select>`,
+    header: `<label class="kit-select"><span class="visually-hidden">Load a sound</span><select data-sound-preset><option value="">Load a sound…</option>${Object.keys(SYNTH_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select></label>`,
     line: () => app.scene().synth, setLine: (line) => { app.scene().synth = line; },
     knobs: SYNTH_KNOB_VIEW, values: () => synth().knobs,
     switches: [

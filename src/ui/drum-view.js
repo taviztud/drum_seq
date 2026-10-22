@@ -1,7 +1,7 @@
 import { knob } from './knob.js';
 import { VOICES, ROWS, PRESET_NAMES, presetPattern } from '../pattern.js';
-import { DENSITIES, generateDrums } from '../generate.js';
-import { KITS, findKit } from '../kits.js';
+import { DENSITIES, generateDrums, mutateDrums } from '../generate.js';
+import { KITS, CHARACTERS, findKit, hasCharacters } from '../kits.js';
 import { DRUM_VOICE } from '../project.js';
 
 const ROW_INFO = [{ id: 'ac', short: 'AC', name: 'Accent' }, ...VOICES];
@@ -21,6 +21,7 @@ export function createDrumView(root, app) {
       <h2 class="logo">Rhythm Composer</h2>
       <label class="kit-select"><span class="visually-hidden">Drum machine</span><select data-kit></select></label>
     </header>
+    <div class="seg character" role="group" aria-label="Character of the samples">${CHARACTERS.map((c) => `<button type="button" data-character="${c.id}">${c.name}</button>`).join('')}</div>
     <p class="kit-status" role="status"></p>
     <div class="voices" role="group" aria-label="Sound to edit"></div>
     <div class="pads drum-pads" role="group" aria-label="Steps"></div>
@@ -38,6 +39,7 @@ export function createDrumView(root, app) {
     <div class="row tools">
       <select data-tool="preset" aria-label="Load a drum pattern"><option value="">Load a pattern…</option></select>
       <button type="button" data-tool="random">Random</button>
+      <button type="button" data-tool="mutate" aria-label="Mutate: change a few hits">Mutate</button>
       <div class="seg density" role="group" aria-label="Random density">${DENSITIES.map(([id, text]) => `<button type="button" data-density="${id}">${text}</button>`).join('')}</div>
       <button type="button" data-tool="clear-voice">Clear sound</button>
       <button type="button" data-tool="clear-all">Clear all</button>
@@ -109,6 +111,9 @@ export function createDrumView(root, app) {
     const sel = app.project.drums.selected;
     const kit = findKit(app.project.drums.kit);
     kitSelect.value = kit.id;
+    // Only the sampler-era kits were recorded in every Character; the others play as they are.
+    characterEl.hidden = !hasCharacters(kit);
+    for (const b of characterEl.children) b.ariaPressed = String(b.dataset.character === app.project.drums.character);
     const info = ROW_INFO.find((v) => v.id === sel);
     for (const [id, chip] of Object.entries(chips)) {
       chip.ariaPressed = String(id === sel);
@@ -164,6 +169,14 @@ export function createDrumView(root, app) {
     app.changed('sound');
     render();
   });
+  const characterEl = root.querySelector('.character');
+  characterEl.addEventListener('click', (e) => {
+    const id = e.target.closest('[data-character]')?.dataset.character;
+    if (!id || id === app.project.drums.character) return;
+    app.project.drums.character = id;
+    app.changed('kit');
+    render();
+  });
   kitSelect.addEventListener('change', () => {
     app.project.drums.kit = kitSelect.value;
     app.changed('kit');
@@ -175,6 +188,7 @@ export function createDrumView(root, app) {
     const tool = b?.dataset.tool;
     const scene = app.scene();
     if (tool === 'random') scene.drums = generateDrums({ steps: scene.steps, density });
+    else if (tool === 'mutate') scene.drums = mutateDrums(scene.drums);
     else if (tool === 'clear-voice') scene.drums[app.project.drums.selected].fill(false);
     else if (tool === 'clear-all') for (const id of ROWS) scene.drums[id].fill(false);
     else return;

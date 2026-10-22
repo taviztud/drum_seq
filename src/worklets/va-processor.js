@@ -142,9 +142,7 @@ class Synth {
       return;
     }
     // Poly: a free voice, else the oldest released one, else the oldest overall.
-    const free = this.voices.find((v) => !v.active)
-      ?? this.voices.filter((v) => v.released).sort((a, b) => a.age - b.age)[0]
-      ?? this.voices.slice().sort((a, b) => a.age - b.age)[0];
+    const free = this.voices.find((v) => !v.active) ?? this.oldest(-1, true) ?? this.oldest(-1, false);
     free.trigger(key, accent, this.age);
     free.pitch = key; // poly voices don't glide
   }
@@ -159,8 +157,17 @@ class Synth {
       else v.target = this.held[0]; // glide back to the note still held
       return;
     }
-    const v = this.voices.filter((x) => x.key === key && !x.released).sort((a, b) => a.age - b.age)[0];
-    v?.release();
+    this.oldest(key, false, true)?.release();
+  }
+
+  // Oldest voice that matches (key -1 = any; released / held filters). A plain scan: no allocation on the audio thread.
+  oldest(key, released, held = false) {
+    let best = null;
+    for (const v of this.voices) {
+      if ((key >= 0 && v.key !== key) || (released && !v.released) || (held && v.released)) continue;
+      if (!best || v.age < best.age) best = v;
+    }
+    return best;
   }
 
   allNotesOff() { this.held = []; for (const v of this.voices) v.release(); }

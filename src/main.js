@@ -1,7 +1,7 @@
 import { createProject, normalizeProject, migrateV1, newId, SCENES } from './project.js';
 import { BPM, parseInRange } from './pattern.js';
 import { recordStep } from './plan.js';
-import { findKit, findKeySound } from './kits.js';
+import { currentKit, findKeySound } from './kits.js';
 import { createRack } from './rack.js';
 import { createBassView, createSynthView, createKeysView } from './ui/note-view.js';
 import { createDrumView } from './ui/drum-view.js';
@@ -141,7 +141,7 @@ function setProject(project, { keepHistory = false } = {}) {
   if (!keepHistory) { history.undo = []; history.redo = []; }
   renderHistory();
   app.rack?.apply(project);
-  if (project.drums.kit !== before.drums.kit) loadSound('kit');
+  if (currentKit(project.drums).id !== currentKit(before.drums).id) loadSound('kit');
   if (project.keys.sound !== before.keys.sound) loadSound('keys');
   showBpm();
   rebuildAll();
@@ -374,17 +374,17 @@ function draw() {
 
 // Load the drum kit or the keyboard sound the project asks for, showing progress on its machine.
 const SOUND_SLOTS = {
-  kit: { find: () => findKit(app.project.drums.kit), wanted: () => app.project.drums.kit, view: () => views.drums, load: (id, cb) => app.rack.loadKit(id, cb) },
-  keys: { find: () => findKeySound(app.project.keys.sound), wanted: () => app.project.keys.sound, view: () => views.keys, load: (id, cb) => app.rack.loadKeys(id, cb) },
+  kit: { find: () => currentKit(app.project.drums), view: () => views.drums, load: (def, cb) => app.rack.loadKit(def, cb) },
+  keys: { find: () => findKeySound(app.project.keys.sound), view: () => views.keys, load: (def, cb) => app.rack.loadKeys(def, cb) },
 };
 async function loadSound(slot) {
   if (!app.rack) return;
-  const { find, wanted, view, load } = SOUND_SLOTS[slot];
+  const { find, view, load } = SOUND_SLOTS[slot];
   const def = find();
-  const show = (text, state) => wanted() === def.id && view().setStatus(text, state);
+  const show = (text, state) => find().id === def.id && view().setStatus(text, state); // a newer pick owns the status line
   show(`Loading ${def.name}…`, 'loading');
   try {
-    await load(def.id, ({ loaded, total }) => show(`Loading ${def.name}… ${loaded}/${total}`, 'loading'));
+    await load(def, ({ loaded, total }) => show(`Loading ${def.name}… ${loaded}/${total}`, 'loading'));
     show(`${def.name} ready`, 'ready');
   } catch (error) {
     console.error(error);
